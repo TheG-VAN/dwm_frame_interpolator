@@ -121,7 +121,7 @@ float4 PS(VS_OUTPUT input) : SV_TARGET {
 	    return float4(m * 100, (m.x + m.y) * -100, 1);
     }
     float2 shift = input.tex - m * 0.5;
-	float4 im = backBufferTex.Sample(smp, input.tex);
+	//float4 im = backBufferTex.Sample(smp, input.tex);
 	float4 shifted = backBufferTex.Sample(smp, shift);
     return shifted;
 	//float4 forwardShift = prevTex.Sample(smp, input.tex + m * 0.5);
