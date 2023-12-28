@@ -76,8 +76,9 @@ float4 CalcMotionLayer(VS_OUTPUT i, float4 searchStart, out float best_sim)
 
 	float randseed = (((dot(uint2(i.pos.xy) % 5, float2(1, 5)) * 17) % 25) + 0.5) / 25.0; //prime shuffled, similar spectral properties to bayer but faster to compute and unique values within 5x5
 	randseed = frac(randseed + UI_ME_MAX_ITERATIONS_PER_LEVEL * 0.6180339887498);
-	float2 randdir; sincos(randseed * 6.283, randdir.x, randdir.y); //yo dawg, I heard you like golden ratios
+	float2 randdir; sincos(randseed * 6.283 / UI_ME_SAMPLES_PER_ITERATION, randdir.x, randdir.y);
 	float2 scale = texelsize;
+	float2 rot; sincos(6.283 / UI_ME_SAMPLES_PER_ITERATION, rot.x, rot.y);
 
 	[loop]
 	for(int j = 0; j < UI_ME_MAX_ITERATIONS_PER_LEVEL && best_sim < 0.999999; j++)
@@ -85,7 +86,7 @@ float4 CalcMotionLayer(VS_OUTPUT i, float4 searchStart, out float best_sim)
 		[loop]
 		for (int s = 1; s < UI_ME_SAMPLES_PER_ITERATION && best_sim < 0.999999; s++) 
 		{
-			randdir = mul(randdir, float2x2(-0.7373688, 0.6754903, -0.6754903, -0.7373688));//rotate by larger golden angle			
+			randdir = mul(randdir, float2x2(rot.y, -rot.x, rot.x, rot.y));			
 			float2 pixelOffset = randdir * scale;
 			float2 samplePos = i.tex + searchCenter + pixelOffset;			 
 
@@ -106,7 +107,7 @@ float4 CalcMotionLayer(VS_OUTPUT i, float4 searchStart, out float best_sim)
 			moment_covariate /= BLOCK_AREA;
 
 			cossim = moment_covariate * rsqrt(moments_local2 * moments_candidate2); 
-			float candidate_similarity = saturate(min3(cossim.z));
+			float candidate_similarity = saturate(min3(cossim));
 
 			[flatten]
 			if(candidate_similarity > best_sim)					
