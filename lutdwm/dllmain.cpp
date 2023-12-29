@@ -297,7 +297,7 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	frametime = 0.9 * frametime + 0.1 * (time_now - time_at).count();
 	time_at = time_now;
 
-	SetVertexBuffer(rect, textureDesc[index].Width >> 2, textureDesc[index].Height >> 2);
+	SetVertexBuffer(rect, textureDesc[index].Width, textureDesc[index].Height);
 
 	ID3D11RenderTargetView* renderTargetView;
 	deviceContext->OMGetRenderTargets(1, &renderTargetView, NULL);
@@ -361,7 +361,7 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	deviceContext->PSSetShaderResources(2, 0, NULL);
 
 	// prev pass (just curr pass but reading from curr texture instead of backbuffer)
-	SetVertexBuffer(rect, textureDesc[index].Width >> 2, textureDesc[index].Height >> 2);
+	SetVertexBuffer(rect, textureDesc[index].Width, textureDesc[index].Height);
 	deviceContext->PSSetShader(currPass, NULL, 0);
 	deviceContext->PSSetShaderResources(0, 1, &currTextureView);
 	deviceContext->PSSetSamplers(0, 1, &samplerState);
@@ -485,8 +485,8 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 		}
 		{
 			D3D11_TEXTURE2D_DESC desc = {};
-			desc.Width = backBufferDesc.Width >> 2;
-			desc.Height = backBufferDesc.Height >> 2;
+			desc.Width = backBufferDesc.Width;
+			desc.Height = backBufferDesc.Height;
 			desc.MipLevels = 0;
 			desc.ArraySize = 1;
 			desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -504,8 +504,8 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 		}
 		{
 			D3D11_TEXTURE2D_DESC desc = {};
-			desc.Width = backBufferDesc.Width >> 2;
-			desc.Height = backBufferDesc.Height >> 2;
+			desc.Width = backBufferDesc.Width;
+			desc.Height = backBufferDesc.Height;
 			desc.MipLevels = 0;
 			desc.ArraySize = 1;
 			desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;

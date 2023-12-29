@@ -122,7 +122,7 @@ float4 PS(VS_OUTPUT input) : SV_TARGET {
     }
     float2 shift = input.tex - m * 0.5;
 	//float4 im = backBufferTex.Sample(smp, input.tex);
-	float4 shifted = backBufferTex.Sample(smp, shift);
+	float4 shifted = prevTex.Sample(smp, input.tex + m * 0.5);
     return shifted;
 	//float4 forwardShift = prevTex.Sample(smp, input.tex + m * 0.5);
 	/*if (distance(shifted, prevTex.Sample(smp, shift)) < Threshold ||
