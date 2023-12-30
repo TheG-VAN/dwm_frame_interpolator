@@ -317,9 +317,9 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	// motion passes
 	deviceContext->PSSetShader(motionPass, NULL, 0);
 	static int frame_count = 0;
-	for (int mip_level = 6; mip_level >= 0; mip_level--) {
+	for (int mip_level = 9; mip_level >= 0; mip_level--) {
 		deviceContext->OMSetRenderTargets(1, targets[mip_level], NULL);
-		if (mip_level == 6) {
+		if (mip_level == 9) {
 			deviceContext->PSSetShaderResources(0, 1, views[0]);  // Use previous final result
 		}
 		else {
