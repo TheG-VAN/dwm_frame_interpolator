@@ -120,21 +120,6 @@ float4 PS(VS_OUTPUT input) : SV_TARGET {
     if (debug) {
 	    return float4(m * 100, (m.x + m.y) * -100, 1);
     }
-    float2 shift = input.tex - m * 0.5;
-	//float4 im = backBufferTex.Sample(smp, input.tex);
-	float4 shifted = prevTex.Sample(smp, input.tex + m * 0.5);
-    return shifted;
-	//float4 forwardShift = prevTex.Sample(smp, input.tex + m * 0.5);
-	/*if (distance(shifted, prevTex.Sample(smp, shift)) < Threshold ||
-		distance(im, prevTex.Sample(smp, input.tex)) < Threshold ||
-		distance(shifted, forwardShift) > Threshold2) {
-		return im;
-	}
-    float4 prev = prevTex.Sample(smp, input.tex);
-	if (min(distance(shifted, im), distance(shifted, prev)) < min(distance(forwardShift, im), distance(forwardShift, prev))) {
-		return shifted;
-	} else {
-		return forwardShift;
-	}*/
+    return prevTex.Sample(smp, input.tex + m * 0.5);
 }
 )";

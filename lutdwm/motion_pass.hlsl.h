@@ -80,6 +80,30 @@ float2 CalcMotionLayer(VS_OUTPUT i, float2 searchStart) {
 	return searchCenter;
 }
 
+// Not actually median for performance reasons, instead just pick the closest value to the mean
+float2 median(float2 uv, float2 texelsize) {
+	float2 ms[9];
+	float2 mean = 0;
+	int i = 0;
+	for(int x = -1; x <= 1; x++)
+	for(int y = -1; y <= 1; y++) {
+		ms[i] = motionLow.SampleLevel(lodSmp, uv + texelsize * float2(x, y), 0).xy;
+		mean += ms[i];
+		i++;
+	}
+	mean /= 9;
+	float minme = 100000;
+	float2 best;
+	for (i = 0; i < 9; i++) {
+		float2 diff = abs(ms[i] - mean);
+		if (diff.x + diff.y < minme) {
+			minme = diff.x + diff.y;
+			best = ms[i];
+		}
+	}
+	return best;
+}
+
 float2 atrous_upscale(VS_OUTPUT i) {	
     float2 texelsize = i.tex / i.pos.xy;
 	float3 localBlock[BLOCK_AREA];
@@ -102,11 +126,9 @@ float2 atrous_upscale(VS_OUTPUT i) {
 	}
 
 	float2 best_motion = 0;
-	float2 mean_motion = 0;
 	for(int x = -1; x <= 1; x++)
 	for(int y = -1; y <= 1; y++) {
 		float2 motion = motionLow.SampleLevel(lodSmp, i.tex + texelsize * BLOCK_SIZE_HALF + texelsize * 2 * float2(x, y), 0).xy;
-		mean_motion += motion;
 		float2 samplePos = i.tex + motion;
 		mse = 0;
 		[loop]
@@ -133,6 +155,8 @@ float4 PS(VS_OUTPUT input) : SV_TARGET {
 	[branch]
     if(mip_gCurr >= 1) {
     	upscaledLowerLayer = atrous_upscale(input);
+	} else {
+		upscaledLowerLayer = median(input.tex, 2 * input.tex / input.pos.xy);
 	}
 	
 	[branch]

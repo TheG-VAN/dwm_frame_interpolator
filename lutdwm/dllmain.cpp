@@ -444,7 +444,7 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 		{
 			D3D11_SAMPLER_DESC samplerDesc = {};
 			samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
-			samplerDesc.AddressU = samplerDesc.AddressV = samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+			samplerDesc.AddressU = samplerDesc.AddressV = samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_MIRROR;
 			samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
 
 			EXECUTE_WITH_LOG(device->CreateSamplerState(&samplerDesc, &samplerState))
