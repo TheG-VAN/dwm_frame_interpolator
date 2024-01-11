@@ -117,8 +117,19 @@ float4 PS(VS_OUTPUT input) : SV_TARGET {
 		return lerp(backBufferTex.Sample(smp, input.tex), pow(1.05 - printed, 20) * float4(0, 1, 1, 1), pow(1 - printed, 10));
 	}
 	float2 m = motionTex.Sample(smp, input.tex).xy;
+    float2 motion_at_middle = motionTex.Sample(smp, input.tex + m * 0.5).xy;
+    float mag_at_middle = abs(motion_at_middle.x) + abs(motion_at_middle.y);
+    // Normalise to counteract effect of DummyApp changing brightness transparency slightly
+    float diff_at_middle = dot(normalize(prevTex.Sample(smp, input.tex + m * 0.5)), normalize(backBufferTex.Sample(smp, input.tex + m * 0.5)));
     if (debug) {
-	    return float4(m * 100, (m.x + m.y) * -100, 1);
+        if (diff_at_middle > 0.9999 && mag_at_middle < 0.001) {
+            return 1;
+        }
+	    return float4(m * 50, (m.x + m.y) * -50, 1);
+    }
+    // If we are trying to pull a pixel which didn't change colour and had little to no motion on it, we can assume it is from a stationary object e.g. HUD so we don't pull from it.
+    if (diff_at_middle > 0.9999 && mag_at_middle < 0.001) {
+        return lerp(prevTex.Sample(smp, input.tex), backBufferTex.Sample(smp, input.tex), 0.5);
     }
     return prevTex.Sample(smp, input.tex + m * 0.5);
 }

@@ -150,7 +150,7 @@ float2 atrous_upscale(VS_OUTPUT i) {
 }
 
 float4 PS(VS_OUTPUT input) : SV_TARGET {
-	float2 upscaledLowerLayer = motionLow.SampleLevel(lodSmp, input.tex, 0).xy;
+	float2 upscaledLowerLayer;
 
 	[branch]
     if(mip_gCurr >= 1) {

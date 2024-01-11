@@ -317,6 +317,7 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	// motion passes
 	deviceContext->PSSetShader(motionPass, NULL, 0);
 	static int frame_count = 0;
+	frame_count++;
 	for (int mip_level = 9; mip_level >= 0; mip_level--) {
 		deviceContext->OMSetRenderTargets(1, targets[mip_level], NULL);
 		if (mip_level == 9) {
@@ -330,10 +331,10 @@ void DrawRectangle(struct tagRECT* rect, int index)
 		deviceContext->PSSetShaderResources(2, 1, &prevTextureView);
 
 		SetVertexBuffer(rect, backBufferDesc.Width >> mip_level, backBufferDesc.Height >> mip_level);
-		
-		int constantData[2] = { mip_level, frame_count++ };
+
+		int constantData[2] = { mip_level, frame_count };
 		SetConstantBuffer(constantData);
-		
+
 		deviceContext->Draw(numVerts, 0);
 	}
 
@@ -348,7 +349,7 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	deviceContext->PSSetShaderResources(1, 1, &prevTextureView);
 	deviceContext->PSSetShaderResources(2, 1, views[0]);
 	deviceContext->PSSetShader(mainPass, NULL, 0);
-	
+
 	// ctrl+shift+alt for debug mode
 	bool debugMode = GetKeyState(VK_CONTROL) & 0x8000 && GetKeyState(VK_SHIFT) & 0x8000 && GetKeyState(VK_MENU) & 0x8000;
 	int constantData[2] = { frametime, debugMode };
@@ -468,8 +469,8 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 				D3DCompile(motion_pass, sizeof motion_pass, NULL, NULL, NULL, "PS", "ps_5_0", 0, 0, &psBlob, &
 					compile_error_interface), compile_error_interface)
 
-				LOG_ONLY_ONCE("Pixel shader compiled successfully")
-				device->CreatePixelShader(psBlob->GetBufferPointer(),
+			LOG_ONLY_ONCE("Pixel shader compiled successfully")
+			device->CreatePixelShader(psBlob->GetBufferPointer(),
 					psBlob->GetBufferSize(), NULL, &motionPass);
 			psBlob->Release();
 		}
