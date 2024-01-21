@@ -206,7 +206,7 @@ UINT offset;
 D3D11_TEXTURE2D_DESC backBufferDesc;
 D3D11_TEXTURE2D_DESC textureDesc[2];
 
-ID3D11SamplerState *samplerState;
+ID3D11SamplerState *pointSamplerState;
 ID3D11Texture2D *texture[2];
 ID3D11ShaderResourceView *textureView[2];
 
@@ -305,7 +305,7 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	// curr pass
 	deviceContext->PSSetShader(currPass, NULL, 0);
 	deviceContext->PSSetShaderResources(0, 1, &textureView[index]);
-	deviceContext->PSSetSamplers(0, 1, &samplerState);
+	deviceContext->PSSetSamplers(0, 1, &lodSamplerState);
 	deviceContext->OMSetRenderTargets(1, &currRenderTarget, NULL);
 
 	int currConstantData[1] = { true };
@@ -345,7 +345,8 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	renderTargetView->Release();
 
 	deviceContext->PSSetShaderResources(0, 1, &textureView[index]);
-	deviceContext->PSSetSamplers(0, 1, &samplerState);
+	deviceContext->PSSetSamplers(0, 1, &lodSamplerState);
+	deviceContext->PSSetSamplers(1, 1, &pointSamplerState);
 	deviceContext->PSSetShaderResources(1, 1, &prevTextureView);
 	deviceContext->PSSetShaderResources(2, 1, views[0]);
 	deviceContext->PSSetShader(mainPass, NULL, 0);
@@ -365,7 +366,7 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	SetVertexBuffer(rect, textureDesc[index].Width, textureDesc[index].Height);
 	deviceContext->PSSetShader(currPass, NULL, 0);
 	deviceContext->PSSetShaderResources(0, 1, &currTextureView);
-	deviceContext->PSSetSamplers(0, 1, &samplerState);
+	deviceContext->PSSetSamplers(0, 1, &lodSamplerState);
 	deviceContext->OMSetRenderTargets(1, &prevRenderTarget, NULL);
 
 	int prevConstantData[1] = { false };
@@ -444,11 +445,11 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 		}
 		{
 			D3D11_SAMPLER_DESC samplerDesc = {};
-			samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+			samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
 			samplerDesc.AddressU = samplerDesc.AddressV = samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_MIRROR;
 			samplerDesc.ComparisonFunc = D3D11_COMPARISON_NEVER;
 
-			EXECUTE_WITH_LOG(device->CreateSamplerState(&samplerDesc, &samplerState))
+			EXECUTE_WITH_LOG(device->CreateSamplerState(&samplerDesc, &pointSamplerState))
 		}
 		{
 			ID3DBlob* psBlob;
@@ -577,7 +578,7 @@ void UninitializeStuff()
 	RELEASE_IF_NOT_NULL(mainPass)
 	RELEASE_IF_NOT_NULL(inputLayout)
 	RELEASE_IF_NOT_NULL(vertexBuffer)
-	RELEASE_IF_NOT_NULL(samplerState)
+	RELEASE_IF_NOT_NULL(pointSamplerState)
 	for (int i = 0; i < 2; i++)
 	{
 		RELEASE_IF_NOT_NULL(texture[i])
@@ -668,7 +669,7 @@ bool ApplyLUT(void* cOverlayContext, IDXGISwapChain* swapChain, struct tagRECT* 
 		deviceContext->PSSetShader(mainPass, NULL, 0);
 
 		deviceContext->PSSetShaderResources(0, 1, &textureView[index]);
-		deviceContext->PSSetSamplers(0, 1, &samplerState);
+		deviceContext->PSSetSamplers(0, 1, &pointSamplerState);
 
 		for (int i = 0; i < numRects; i++)
 		{

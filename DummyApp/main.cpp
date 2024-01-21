@@ -8,8 +8,6 @@ using namespace std::chrono;
 
 const LPCWSTR g_szClassName = L"dummyApp";
 bool quitProgram = false;
-bool frameVisible = false;
-int t = 0;
 
 // Window event handling
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -82,44 +80,15 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	ShowWindow(hwnd, nCmdShow);
 	UpdateWindow(hwnd);
 
-	// Setting up to do V-sync. Guidance came from:
-	// https://www.vsynctester.com/firefoxisbroken.html
-	// https://gist.github.com/anonymous/4397e4909c524c939bee#file-gistfile1-txt-L3
-	D3DKMT_WAITFORVERTICALBLANKEVENT we;
-	D3DKMT_OPENADAPTERFROMHDC oa;
-	oa.hDc = GetDC(hwnd);
-	NTSTATUS result = D3DKMTOpenAdapterFromHdc(&oa);
-	if (result == STATUS_INVALID_PARAMETER) {
-		MessageBox(NULL, L"D3DKMTOpenAdapterFromHdc function received an invalid parameter.", L"Error!",
-			MB_ICONEXCLAMATION | MB_OK);
-		return 0;
-	}
-	else if (result == STATUS_NO_MEMORY) {
-		MessageBox(NULL, L"D3DKMTOpenAdapterFromHdc function, kernel ran out of memory.", L"Error!",
-			MB_ICONEXCLAMATION | MB_OK);
-		return 0;
-	}
-	we.hAdapter = oa.hAdapter;
-	we.hDevice = 0;
-	we.VidPnSourceId = oa.VidPnSourceId;
-
-	// Sets up for D3DKTGetScanLine(), to poll for VBlank exit
-	D3DKMT_GETSCANLINE gsl;
-	gsl.hAdapter = oa.hAdapter;
-	gsl.VidPnSourceId = oa.VidPnSourceId;
+	bool flipper = false;
 
 	while (!quitProgram)
 	{
-		/*result = D3DKMTWaitForVerticalBlankEvent(&we);
-		do {
-			high_resolution_clock::time_point pollTime = high_resolution_clock::now() + microseconds(100);
-			while (pollTime > high_resolution_clock::now())
-			{}
-			result = D3DKMTGetScanLine(&gsl);
-		} while (gsl.InVerticalBlank == TRUE);*/
-		frameVisible = !frameVisible;
-		// Window transparency: 0 is invisible, 255 is opaque
-		SetLayeredWindowAttributes(hwnd, 0, 1 + frameVisible, LWA_ALPHA);
+		flipper = !flipper;
+		// Set the color key to RGB(1, 1, 1) or RGB(2, 2, 2) each frame.
+		// This does nothing since the window is completely transparent anyway but it tricks dwm into updating.
+		// Do 1 + flipper because RGB(0, 0, 0) as color key makes the mini-window seen when holding alt-tab or hovering over it on the taskbar flicker.
+		SetLayeredWindowAttributes(hwnd, 1 + flipper, 0, LWA_COLORKEY|LWA_ALPHA);
 		RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE);
 		DwmFlush();
 		while (PeekMessage(&Msg, NULL, 0, 0, PM_REMOVE) > 0) {
