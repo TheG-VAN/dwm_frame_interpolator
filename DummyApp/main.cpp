@@ -85,10 +85,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	while (!quitProgram)
 	{
 		flipper = !flipper;
-		// Set the color key to RGB(1, 1, 1) or RGB(2, 2, 2) each frame.
-		// This does nothing since the window is completely transparent anyway but it tricks dwm into updating.
-		// Do 1 + flipper because RGB(0, 0, 0) as color key makes the mini-window seen when holding alt-tab or hovering over it on the taskbar flicker.
-		SetLayeredWindowAttributes(hwnd, 1 + flipper, 0, LWA_COLORKEY|LWA_ALPHA);
+		SetLayeredWindowAttributes(hwnd, 0, 1 + flipper, LWA_ALPHA);
 		RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE);
 		DwmFlush();
 		while (PeekMessage(&Msg, NULL, 0, 0, PM_REMOVE) > 0) {
