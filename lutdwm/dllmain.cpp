@@ -358,10 +358,6 @@ void DrawRectangle(struct tagRECT* rect, int index)
 
 	deviceContext->Draw(numVerts, 0);
 
-	// Clear extra slots
-	deviceContext->PSSetShaderResources(1, 0, NULL);
-	deviceContext->PSSetShaderResources(2, 0, NULL);
-
 	// prev pass (just curr pass but reading from curr texture instead of backbuffer)
 	SetVertexBuffer(rect, textureDesc[index].Width, textureDesc[index].Height);
 	deviceContext->PSSetShader(currPass, NULL, 0);
