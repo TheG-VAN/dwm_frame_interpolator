@@ -297,12 +297,11 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	frametime = 0.9 * frametime + 0.1 * (time_now - time_at).count();
 	time_at = time_now;
 
-	SetVertexBuffer(rect, textureDesc[index].Width, textureDesc[index].Height);
-
 	ID3D11RenderTargetView* renderTargetView;
 	deviceContext->OMGetRenderTargets(1, &renderTargetView, NULL);
 
 	// curr pass
+	SetVertexBuffer(rect, textureDesc[index].Width, textureDesc[index].Height);
 	deviceContext->PSSetShader(currPass, NULL, 0);
 	deviceContext->PSSetShaderResources(0, 1, &textureView[index]);
 	deviceContext->PSSetSamplers(0, 1, &lodSamplerState);
@@ -318,9 +317,9 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	deviceContext->PSSetShader(motionPass, NULL, 0);
 	static int frame_count = 0;
 	frame_count++;
-	for (int mip_level = 9; mip_level >= 0; mip_level--) {
+	for (int mip_level = 8; mip_level >= 0; mip_level--) {
 		deviceContext->OMSetRenderTargets(1, targets[mip_level], NULL);
-		if (mip_level == 9) {
+		if (mip_level == 8) {
 			deviceContext->PSSetShaderResources(0, 1, views[0]);  // Use previous final result
 		}
 		else {
@@ -330,9 +329,9 @@ void DrawRectangle(struct tagRECT* rect, int index)
 		deviceContext->PSSetShaderResources(1, 1, &currTextureView);
 		deviceContext->PSSetShaderResources(2, 1, &prevTextureView);
 
-		SetVertexBuffer(rect, backBufferDesc.Width >> mip_level, backBufferDesc.Height >> mip_level);
+		SetVertexBuffer(rect, backBufferDesc.Width >> (1 + mip_level), backBufferDesc.Height >> (1 + mip_level));
 
-		int constantData[2] = { mip_level, frame_count };
+		int constantData[2] = { mip_level + 1, frame_count };
 		SetConstantBuffer(constantData);
 
 		deviceContext->Draw(numVerts, 0);
@@ -520,10 +519,10 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 			tex->Release();
 		}
 		{
-			for (int i = 0; i <= 9; i++) {
+			for (int i = 0; i <= 8; i++) {
 				D3D11_TEXTURE2D_DESC desc = {};
-				desc.Width = backBufferDesc.Width >> i;
-				desc.Height = backBufferDesc.Height >> i;
+				desc.Width = backBufferDesc.Width >> (1 + i);
+				desc.Height = backBufferDesc.Height >> (1 + i);
 				desc.MipLevels = 0;
 				desc.ArraySize = 1;
 				desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
