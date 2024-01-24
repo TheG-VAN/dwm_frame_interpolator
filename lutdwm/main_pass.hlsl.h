@@ -120,12 +120,9 @@ float4 PS(VS_OUTPUT input) : SV_TARGET {
 	float2 m = motionTex.Sample(smp, input.tex).xy;
     float2 texelsize = input.tex / input.pos.xy;
     float2 pix_uv = ceil((input.tex + m * 0.5) / texelsize) * texelsize;
-    // Using point sampling reduces false negatives - because if the shifted pos is 90% on a stationary object but 10% on a moving object, the linearly sampled value changes.
-    // 0.004 ~= 1/255 which is change caused by DummyApp
-    bool matched_in_middle = all(abs(prevTex.Sample(pointSmp, input.tex + m * 0.5) - backBufferTex.Sample(pointSmp, input.tex + m * 0.5)) < 0.004);
     float2 motion_in_middle = motionTex.Sample(smp, input.tex + m * 0.5).xy;
-    // If we are trying to pull a pixel which didn't change colour and has low motion (less than half of current pixel), we assume it is from a stationary object e.g. HUD so we don't pull from it.
-    bool pulling_from_hud = matched_in_middle && abs(m.x) + abs(m.y) > 2 * (abs(motion_in_middle.x) + abs(motion_in_middle.y));
+    // If we are trying to pull a pixel which has low motion (less than a tenth of current pixel), we assume it is from a stationary object e.g. HUD so we don't pull from it.
+    bool pulling_from_hud = abs(m.x) + abs(m.y) > 10 * (abs(motion_in_middle.x) + abs(motion_in_middle.y));
     if (debug) {
         if (pulling_from_hud) {
             return 1;
@@ -135,6 +132,6 @@ float4 PS(VS_OUTPUT input) : SV_TARGET {
     if (pulling_from_hud) {
         return lerp(prevTex.Sample(smp, input.tex), backBufferTex.Sample(smp, input.tex), 0.5);
     }
-    return prevTex.Sample(smp, input.tex + m * 0.5);
+    return backBufferTex.Sample(smp, input.tex + m * 0.5);
 }
 )";

@@ -301,7 +301,7 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	deviceContext->OMGetRenderTargets(1, &renderTargetView, NULL);
 
 	// curr pass
-	SetVertexBuffer(rect, textureDesc[index].Width, textureDesc[index].Height);
+	SetVertexBuffer(rect, textureDesc[index].Width >> 1, textureDesc[index].Height >> 1);
 	deviceContext->PSSetShader(currPass, NULL, 0);
 	deviceContext->PSSetShaderResources(0, 1, &textureView[index]);
 	deviceContext->PSSetSamplers(0, 1, &lodSamplerState);
@@ -331,7 +331,7 @@ void DrawRectangle(struct tagRECT* rect, int index)
 
 		SetVertexBuffer(rect, backBufferDesc.Width >> (1 + mip_level), backBufferDesc.Height >> (1 + mip_level));
 
-		int constantData[2] = { mip_level + 1, frame_count };
+		int constantData[2] = { mip_level, frame_count };
 		SetConstantBuffer(constantData);
 
 		deviceContext->Draw(numVerts, 0);
@@ -358,7 +358,7 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	deviceContext->Draw(numVerts, 0);
 
 	// prev pass (just curr pass but reading from curr texture instead of backbuffer)
-	SetVertexBuffer(rect, textureDesc[index].Width, textureDesc[index].Height);
+	SetVertexBuffer(rect, textureDesc[index].Width >> 1, textureDesc[index].Height >> 1);
 	deviceContext->PSSetShader(currPass, NULL, 0);
 	deviceContext->PSSetShaderResources(0, 1, &currTextureView);
 	deviceContext->PSSetSamplers(0, 1, &lodSamplerState);
@@ -482,8 +482,8 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 		}
 		{
 			D3D11_TEXTURE2D_DESC desc = {};
-			desc.Width = backBufferDesc.Width;
-			desc.Height = backBufferDesc.Height;
+			desc.Width = backBufferDesc.Width >> 1;
+			desc.Height = backBufferDesc.Height >> 1;
 			desc.MipLevels = 0;
 			desc.ArraySize = 1;
 			desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -501,8 +501,8 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 		}
 		{
 			D3D11_TEXTURE2D_DESC desc = {};
-			desc.Width = backBufferDesc.Width;
-			desc.Height = backBufferDesc.Height;
+			desc.Width = backBufferDesc.Width >> 1;
+			desc.Height = backBufferDesc.Height >> 1;
 			desc.MipLevels = 0;
 			desc.ArraySize = 1;
 			desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;

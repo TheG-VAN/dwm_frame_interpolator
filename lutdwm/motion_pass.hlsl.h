@@ -32,8 +32,8 @@ float2 CalcMotionLayer(VS_OUTPUT i, float2 searchStart) {
 	// sample each pixel in 3x3 grid
 	for(uint k = 0; k < BLOCK_SIZE * BLOCK_SIZE; k++) {
 		float2 tuv = i.tex + float2(k / BLOCK_SIZE, k % BLOCK_SIZE) * texelsize;
-		float3 t_local = currTex.SampleLevel(lodSmp, tuv, mip_gCurr).xyz;
-		float3 t_search = prevTex.SampleLevel(lodSmp, (tuv + searchStart), mip_gCurr).xyz;
+		float3 t_local = prevTex.SampleLevel(lodSmp, tuv, mip_gCurr).xyz;
+		float3 t_search = currTex.SampleLevel(lodSmp, (tuv + searchStart), mip_gCurr).xyz;
 
 		localBlock[k] = t_local; 
 		mse += (t_local - t_search) * (t_local - t_search);
@@ -61,7 +61,7 @@ float2 CalcMotionLayer(VS_OUTPUT i, float2 searchStart) {
 
 			[loop]
 			for(uint k = 0; k < BLOCK_SIZE * BLOCK_SIZE; k++) {
-				float3 t = prevTex.SampleLevel(lodSmp, (samplePos + float2(k / BLOCK_SIZE, k % BLOCK_SIZE) * texelsize), mip_gCurr).xyz;
+				float3 t = currTex.SampleLevel(lodSmp, (samplePos + float2(k / BLOCK_SIZE, k % BLOCK_SIZE) * texelsize), mip_gCurr).xyz;
 				mse += (localBlock[k] - t) * (localBlock[k] - t);
 			}
 
@@ -114,8 +114,8 @@ float2 atrous_upscale(VS_OUTPUT i) {
 	for(uint k = 0; k < BLOCK_SIZE * BLOCK_SIZE; k++)
 	{
 		float2 tuv = i.tex + float2(k / BLOCK_SIZE, k % BLOCK_SIZE) * texelsize;
-		float3 t_local = currTex.SampleLevel(lodSmp, tuv, mip_gCurr).xyz;
-		float3 t_search = prevTex.SampleLevel(lodSmp, tuv, mip_gCurr).xyz;
+		float3 t_local = prevTex.SampleLevel(lodSmp, tuv, mip_gCurr).xyz;
+		float3 t_search = currTex.SampleLevel(lodSmp, tuv, mip_gCurr).xyz;
 		localBlock[k] = t_local; 
 		mse += (t_local - t_search) * (t_local - t_search);
 	}
@@ -133,7 +133,7 @@ float2 atrous_upscale(VS_OUTPUT i) {
 		mse = 0;
 		[loop]
 		for(uint k = 0; k < BLOCK_SIZE * BLOCK_SIZE; k++) {
-			float3 t = prevTex.SampleLevel(lodSmp, (samplePos + float2(k / BLOCK_SIZE, k % BLOCK_SIZE) * texelsize), mip_gCurr).xyz;
+			float3 t = currTex.SampleLevel(lodSmp, (samplePos + float2(k / BLOCK_SIZE, k % BLOCK_SIZE) * texelsize), mip_gCurr).xyz;
 			mse += (localBlock[k] - t) * (localBlock[k] - t);
 		}
 
@@ -153,14 +153,14 @@ float4 PS(VS_OUTPUT input) : SV_TARGET {
 	float2 upscaledLowerLayer;
 
 	[branch]
-    if(mip_gCurr >= 1) {
+    if(mip_gCurr >= 0) {
     	upscaledLowerLayer = atrous_upscale(input);
 	} else {
 		upscaledLowerLayer = median(input.tex, 2 * input.tex / input.pos.xy);
 	}
 	
 	[branch]
-	if(mip_gCurr >= 2) {
+	if(mip_gCurr >= 1) {
 		upscaledLowerLayer = CalcMotionLayer(input, upscaledLowerLayer);
 	}
 
