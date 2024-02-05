@@ -317,9 +317,9 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	deviceContext->PSSetShader(motionPass, NULL, 0);
 	static int frame_count = 0;
 	frame_count++;
-	for (int mip_level = 8; mip_level >= 0; mip_level--) {
+	for (int mip_level = 6; mip_level >= 0; mip_level--) {
 		deviceContext->OMSetRenderTargets(1, targets[mip_level], NULL);
-		if (mip_level == 8) {
+		if (mip_level == 6) {
 			deviceContext->PSSetShaderResources(0, 1, views[0]);  // Use previous final result
 		}
 		else {
@@ -329,7 +329,7 @@ void DrawRectangle(struct tagRECT* rect, int index)
 		deviceContext->PSSetShaderResources(1, 1, &currTextureView);
 		deviceContext->PSSetShaderResources(2, 1, &prevTextureView);
 
-		SetVertexBuffer(rect, backBufferDesc.Width >> (1 + mip_level), backBufferDesc.Height >> (1 + mip_level));
+		SetVertexBuffer(rect, backBufferDesc.Width >> (3 + mip_level), backBufferDesc.Height >> (3 + mip_level));
 
 		int constantData[2] = { mip_level, frame_count };
 		SetConstantBuffer(constantData);
@@ -519,10 +519,10 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 			tex->Release();
 		}
 		{
-			for (int i = 0; i <= 8; i++) {
+			for (int i = 0; i <= 6; i++) {
 				D3D11_TEXTURE2D_DESC desc = {};
-				desc.Width = backBufferDesc.Width >> (1 + i);
-				desc.Height = backBufferDesc.Height >> (1 + i);
+				desc.Width = backBufferDesc.Width >> (3 + i);
+				desc.Height = backBufferDesc.Height >> (3 + i);
 				desc.MipLevels = 0;
 				desc.ArraySize = 1;
 				desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;

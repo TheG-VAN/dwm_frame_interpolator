@@ -1,5 +1,5 @@
 const char motion_pass[] = R"(
-#define BLOCK_SIZE								3
+#define BLOCK_SIZE								4
 #define BLOCK_SIZE_HALF							(BLOCK_SIZE * 0.5 - 0.5)
 #define BLOCK_AREA 								(BLOCK_SIZE * BLOCK_SIZE)
 #define UI_ME_MAX_ITERATIONS_PER_LEVEL			2
@@ -24,7 +24,7 @@ float noise(float2 co) {
 }
 
 float2 CalcMotionLayer(VS_OUTPUT i, float2 searchStart) {	
-	float2 texelsize = i.tex / i.pos.xy;
+	float2 texelsize = (i.tex / i.pos.xy) / BLOCK_SIZE;
 	float3 localBlock[BLOCK_AREA];
 	float3 mse = 0;
 
@@ -105,7 +105,7 @@ float2 median(float2 uv, float2 texelsize) {
 }
 
 float2 atrous_upscale(VS_OUTPUT i) {	
-    float2 texelsize = i.tex / i.pos.xy;
+    float2 texelsize = (i.tex / i.pos.xy) / BLOCK_SIZE;
 	float3 localBlock[BLOCK_AREA];
 	float3 mse = 0;
 
@@ -128,7 +128,7 @@ float2 atrous_upscale(VS_OUTPUT i) {
 	float2 best_motion = 0;
 	for(int x = -1; x <= 1; x++)
 	for(int y = -1; y <= 1; y++) {
-		float2 motion = motionLow.SampleLevel(lodSmp, i.tex + texelsize * BLOCK_SIZE_HALF + texelsize * 2 * float2(x, y), 0).xy;
+		float2 motion = motionLow.SampleLevel(lodSmp, i.tex + texelsize * BLOCK_SIZE_HALF + texelsize * 2 * float2(x, y) * BLOCK_SIZE, 0).xy;
 		float2 samplePos = i.tex + motion;
 		mse = 0;
 		[loop]
