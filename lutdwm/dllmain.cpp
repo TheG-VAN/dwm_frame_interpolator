@@ -319,12 +319,7 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	frame_count++;
 	for (int mip_level = 6; mip_level >= 0; mip_level--) {
 		deviceContext->OMSetRenderTargets(1, targets[mip_level], NULL);
-		if (mip_level == 6) {
-			deviceContext->PSSetShaderResources(0, 1, views[0]);  // Use previous final result
-		}
-		else {
-			deviceContext->PSSetShaderResources(0, 1, views[mip_level + 1]);
-		}
+		deviceContext->PSSetShaderResources(0, 1, views[mip_level + 1]);
 		deviceContext->PSSetSamplers(0, 1, &lodSamplerState);
 		deviceContext->PSSetShaderResources(1, 1, &currTextureView);
 		deviceContext->PSSetShaderResources(2, 1, &prevTextureView);

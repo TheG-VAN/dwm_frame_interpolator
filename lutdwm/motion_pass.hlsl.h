@@ -43,41 +43,56 @@ float2 CalcMotionLayer(VS_OUTPUT i, float2 searchStart) {
 	float2 bestMotion = 0;
 	float2 searchCenter = searchStart;
 
-	float randseed = (((dot(uint2(i.pos.xy) % 5, float2(1, 5)) * 17) % 25) + 0.5) / 25.0; //prime shuffled, similar spectral properties to bayer but faster to compute and unique values within 5x5
-	randseed = frac(randseed + UI_ME_MAX_ITERATIONS_PER_LEVEL * 0.6180339887498);
-	float2 randdir; sincos(randseed * 6.283 / UI_ME_SAMPLES_PER_ITERATION, randdir.x, randdir.y);
-	float2 scale = texelsize;
-	float2 rot; sincos(6.283 / UI_ME_SAMPLES_PER_ITERATION, rot.x, rot.y);
-
-	[loop]
-	for(int j = 0; j < UI_ME_MAX_ITERATIONS_PER_LEVEL && min_mse > 0.001; j++) {
-		[loop]
-		for (int s = 1; s < UI_ME_SAMPLES_PER_ITERATION && min_mse > 0.001; s++) {
-			randdir = mul(randdir, float2x2(rot.y, -rot.x, rot.x, rot.y));			
-			float2 pixelOffset = randdir * scale;
-			float2 samplePos = i.tex + searchCenter + pixelOffset;			 
-
-			mse = 0;
-
-			[loop]
-			for(uint k = 0; k < BLOCK_SIZE * BLOCK_SIZE; k++) {
-				float3 t = currTex.SampleLevel(lodSmp, (samplePos + float2(k / BLOCK_SIZE, k % BLOCK_SIZE) * texelsize), mip_gCurr).xyz;
-				mse += (localBlock[k] - t) * (localBlock[k] - t);
-			}
-
-			float new_mse = mse.x + mse.y + mse.z;
-
-			[flatten]
-			if(new_mse < min_mse) {
-				min_mse = new_mse;
-				bestMotion = pixelOffset;
-			}			
-		}
-		searchCenter += bestMotion;
-		bestMotion = 0;
-		scale *= 0.5;
+	if (min_mse < 0.001) {
+		return searchStart;
 	}
-	return searchCenter;
+
+	float2 left_uv = texelsize * float2(-1, 0);
+	float2 up_uv = texelsize * float2(0, -1);
+	float2 right_uv = texelsize * float2(1, 0);
+	float2 down_uv = texelsize * float2(0, 1);
+	float2 sample_uvs[4] = {left_uv, up_uv, right_uv, down_uv};
+	int best_uv = -1;
+	for (int u = 0; u < 4; u++) {
+		mse = 0;
+		[loop]
+		for(uint k = 0; k < BLOCK_SIZE * BLOCK_SIZE; k++) {
+			float3 t = currTex.SampleLevel(lodSmp, (i.tex + searchStart + sample_uvs[u] + float2(k / BLOCK_SIZE, k % BLOCK_SIZE) * texelsize), mip_gCurr).xyz;
+			mse += (localBlock[k] - t) * (localBlock[k] - t);
+		}
+		float new_mse = mse.x + mse.y + mse.z;
+
+		[flatten]
+		if(new_mse < min_mse) {
+			min_mse = new_mse;
+			best_uv = u;
+		}
+	}
+	if (best_uv == -1) {
+		return searchStart;
+	}
+
+	bestMotion = sample_uvs[best_uv] + searchStart;
+	float x = sample_uvs[best_uv].x;
+	float y = sample_uvs[best_uv].y;
+	// Create octagon pattern
+	float2 sample_uvs2[4] = {float2(x + 2 * y, y + 2 * x), float2(2 * x + y, x + 2 * y), float2(2 * x - y, 2 * y - x), float2(x - 2 * y, y - 2 * x)};
+	for (int u = 0; u < 4; u++) {
+		mse = 0;
+		[loop]
+		for(uint k = 0; k < BLOCK_SIZE * BLOCK_SIZE; k++) {
+			float3 t = currTex.SampleLevel(lodSmp, (i.tex + searchStart + sample_uvs2[u] + float2(k / BLOCK_SIZE, k % BLOCK_SIZE) * texelsize), mip_gCurr).xyz;
+			mse += (localBlock[k] - t) * (localBlock[k] - t);
+		}
+		float new_mse = mse.x + mse.y + mse.z;
+
+		[flatten]
+		if(new_mse < min_mse) {
+			min_mse = new_mse;
+			bestMotion = sample_uvs2[u] + searchStart;
+		}
+	}
+	return bestMotion;
 }
 
 // Not actually median for performance reasons, instead just pick the closest value to the mean

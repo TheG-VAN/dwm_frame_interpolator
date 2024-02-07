@@ -130,7 +130,7 @@ float4 PS(VS_OUTPUT input) : SV_TARGET {
 	    return float4(m * 50, (m.x + m.y) * -50, 1);
     }
     if (pulling_from_hud) {
-        return lerp(prevTex.Sample(smp, input.tex), backBufferTex.Sample(smp, input.tex), 0.5);
+        return backBufferTex.Sample(smp, input.tex);
     }
     return backBufferTex.Sample(smp, input.tex + m * 0.5);
 }
