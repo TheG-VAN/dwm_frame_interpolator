@@ -119,10 +119,16 @@ float4 PS(VS_OUTPUT input) : SV_TARGET {
 	}
 	float2 m = motionTex.Sample(smp, input.tex).xy;
     float2 texelsize = input.tex / input.pos.xy;
-    float2 pix_uv = ceil((input.tex + m * 0.5) / texelsize) * texelsize;
-    float2 motion_in_middle = motionTex.Sample(smp, input.tex + m * 0.5).xy;
-    // If we are trying to pull a pixel which has low motion (less than a tenth of current pixel), we assume it is from a stationary object e.g. HUD so we don't pull from it.
-    bool pulling_from_hud = abs(m.x) + abs(m.y) > 10 * (abs(motion_in_middle.x) + abs(motion_in_middle.y));
+    bool pulling_from_hud = false;
+    float mmult = 0.5;
+    for (; mmult > 0; mmult -= 0.2) {
+        float2 motion_in_middle = motionTex.Sample(smp, input.tex + m * mmult).xy;
+        // If we are trying to pull a pixel which has low motion or significantly different motion to current pixel, try a closer pixel.
+        pulling_from_hud = dot(abs(m - motion_in_middle), 1) > abs(motion_in_middle.x) + abs(motion_in_middle.y);
+        if (!pulling_from_hud) {
+            break;
+        }
+    }
     if (debug) {
         if (pulling_from_hud) {
             return 1;
@@ -132,6 +138,6 @@ float4 PS(VS_OUTPUT input) : SV_TARGET {
     if (pulling_from_hud) {
         return backBufferTex.Sample(smp, input.tex);
     }
-    return backBufferTex.Sample(smp, input.tex + m * 0.5);
+    return backBufferTex.Sample(smp, input.tex + m * mmult);
 }
 )";
