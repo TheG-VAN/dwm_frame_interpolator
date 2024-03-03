@@ -12,6 +12,7 @@
 #include "main_pass.hlsl.h"
 #include "curr_pass.hlsl.h"
 #include "motion_pass.hlsl.h"
+#include "change_pass.hlsl.h"
 #pragma comment (lib, "d3d11.lib") // Maybe un-useful
 #pragma comment (lib, "d3dcompiler.lib")
 #pragma comment (lib, "dxgi.lib") // Maybe un-useful
@@ -242,6 +243,10 @@ ID3D11RenderTargetView* motion9RenderTarget;
 ID3D11ShaderResourceView** views[] = { &motion0TextureView, &motion1TextureView, &motion2TextureView, &motion3TextureView, &motion4TextureView, &motion5TextureView, &motion6TextureView, &motion7TextureView, &motion8TextureView, &motion9TextureView };
 ID3D11RenderTargetView** targets[] = { &motion0RenderTarget, &motion1RenderTarget, &motion2RenderTarget, &motion3RenderTarget, &motion4RenderTarget, &motion5RenderTarget, &motion6RenderTarget, &motion7RenderTarget, &motion8RenderTarget, &motion9RenderTarget };
 
+ID3D11PixelShader* changePass;
+ID3D11ShaderResourceView* changeTextureView;
+ID3D11RenderTargetView* changeRenderTarget;
+
 ID3D11Buffer* constantBuffer;
 
 std::chrono::high_resolution_clock::time_point time_at = std::chrono::high_resolution_clock::now();
@@ -282,11 +287,11 @@ void SetVertexBuffer(struct tagRECT* rect, float texWidth, float texHeight) {
 	deviceContext->IASetVertexBuffers(0, 1, &vertexBuffer, &stride, &offset);
 }
 
-void SetConstantBuffer(int constantData[]) {
+void SetConstantBuffer(int constantData[], int length) {
 	D3D11_MAPPED_SUBRESOURCE resource;
 	EXECUTE_WITH_LOG(deviceContext->Map((ID3D11Resource*)constantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0,
 		&resource))
-		memcpy(resource.pData, constantData, sizeof(constantData));
+		memcpy(resource.pData, constantData, sizeof(int) * length);
 	deviceContext->Unmap((ID3D11Resource*)constantBuffer, 0);
 	deviceContext->PSSetConstantBuffers(0, 1, &constantBuffer);
 }
@@ -308,10 +313,21 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	deviceContext->OMSetRenderTargets(1, &currRenderTarget, NULL);
 
 	int currConstantData[1] = { true };
-	SetConstantBuffer(currConstantData);
+	SetConstantBuffer(currConstantData, 1);
 
 	deviceContext->Draw(numVerts, 0);
 	deviceContext->GenerateMips(currTextureView);
+
+	// change pass
+	SetVertexBuffer(rect, textureDesc[index].Width >> 4, textureDesc[index].Height >> 4);
+	deviceContext->PSSetShader(changePass, NULL, 0);
+	deviceContext->OMSetRenderTargets(1, &changeRenderTarget, NULL);
+	deviceContext->PSSetShaderResources(0, 1, &currTextureView);
+	deviceContext->PSSetShaderResources(1, 1, &prevTextureView);
+	deviceContext->PSSetSamplers(0, 1, &lodSamplerState);
+
+	deviceContext->Draw(numVerts, 0);
+	deviceContext->GenerateMips(changeTextureView);
 
 	// motion passes
 	deviceContext->PSSetShader(motionPass, NULL, 0);
@@ -323,11 +339,12 @@ void DrawRectangle(struct tagRECT* rect, int index)
 		deviceContext->PSSetSamplers(0, 1, &lodSamplerState);
 		deviceContext->PSSetShaderResources(1, 1, &currTextureView);
 		deviceContext->PSSetShaderResources(2, 1, &prevTextureView);
+		deviceContext->PSSetShaderResources(3, 1, &changeTextureView);
 
 		SetVertexBuffer(rect, backBufferDesc.Width >> (3 + mip_level), backBufferDesc.Height >> (3 + mip_level));
 
 		int constantData[2] = { mip_level, frame_count };
-		SetConstantBuffer(constantData);
+		SetConstantBuffer(constantData, 2);
 
 		deviceContext->Draw(numVerts, 0);
 	}
@@ -348,7 +365,7 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	// ctrl+shift+alt for debug mode
 	bool debugMode = GetKeyState(VK_CONTROL) & 0x8000 && GetKeyState(VK_SHIFT) & 0x8000 && GetKeyState(VK_MENU) & 0x8000;
 	int constantData[2] = { frametime, debugMode };
-	SetConstantBuffer(constantData);
+	SetConstantBuffer(constantData, 2);
 
 	deviceContext->Draw(numVerts, 0);
 
@@ -360,7 +377,7 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	deviceContext->OMSetRenderTargets(1, &prevRenderTarget, NULL);
 
 	int prevConstantData[1] = { false };
-	SetConstantBuffer(prevConstantData);
+	SetConstantBuffer(prevConstantData, 1);
 
 	deviceContext->Draw(numVerts, 0);
 	deviceContext->GenerateMips(prevTextureView);
@@ -466,6 +483,18 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 			psBlob->Release();
 		}
 		{
+			ID3DBlob* psBlob;
+			ID3DBlob* compile_error_interface;
+			EXECUTE_D3DCOMPILE_WITH_LOG(
+				D3DCompile(change_pass, sizeof change_pass, NULL, NULL, NULL, "PS", "ps_5_0", 0, 0, &psBlob, &
+					compile_error_interface), compile_error_interface)
+
+				LOG_ONLY_ONCE("Pixel shader compiled successfully")
+				device->CreatePixelShader(psBlob->GetBufferPointer(),
+					psBlob->GetBufferSize(), NULL, &changePass);
+			psBlob->Release();
+		}
+		{
 			D3D11_SAMPLER_DESC samplerDesc = {};
 			samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
 			samplerDesc.AddressU = samplerDesc.AddressV = samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_MIRROR;
@@ -542,6 +571,25 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 			constantBufferDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
 
 			EXECUTE_WITH_LOG(device->CreateBuffer(&constantBufferDesc, NULL, &constantBuffer))
+		}
+		{
+			D3D11_TEXTURE2D_DESC desc = {};
+			desc.Width = backBufferDesc.Width >> 4;
+			desc.Height = backBufferDesc.Height >> 4;
+			desc.MipLevels = 0;
+			desc.ArraySize = 1;
+			desc.Format = DXGI_FORMAT_R8_UNORM;
+			desc.SampleDesc.Count = 1;
+			desc.Usage = D3D11_USAGE_DEFAULT;
+			desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+			desc.CPUAccessFlags = 0;
+			desc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
+
+			ID3D11Texture2D* tex;
+			EXECUTE_WITH_LOG(device->CreateTexture2D(&desc, NULL, &tex))
+				EXECUTE_WITH_LOG(device->CreateShaderResourceView((ID3D11Resource*)tex, NULL, &changeTextureView))
+				EXECUTE_WITH_LOG(device->CreateRenderTargetView((ID3D11Resource*)tex, NULL, &changeRenderTarget))
+				tex->Release();
 		}
 	}
 	catch (std::exception& ex)
