@@ -17,9 +17,11 @@ Texture2D currTex : register(t1);
 Texture2D prevTex : register(t2);
 
 Texture2D changeTex : register(t3);
+Texture2D motionCopyTex : register(t4);
 
 int mip_gCurr : register(b0);
 int FRAME_COUNT : register(b0);
+int mult : register(b0);
 
 float noise(float2 co) {
   return frac(sin(dot(co.xy ,float2(1.0,73))) * 437580.5453);
@@ -168,7 +170,11 @@ float2 atrous_upscale(VS_OUTPUT i) {
 
 float4 PS(VS_OUTPUT input) : SV_TARGET {
 	if (changeTex.SampleLevel(lodSmp, float2(0.25, 0.5), 5).x + changeTex.SampleLevel(lodSmp, float2(0.75, 0.5), 5).x == 0) {
-		return 0;
+		float4 mc = motionCopyTex.Sample(lodSmp, input.tex);
+		if (mc.w - 1.0 / mult <= 0) {
+			return 0;
+		}
+		return mc - float4(0, 0, 0, 1.0 / mult);
 	}
 
 	float2 upscaledLowerLayer;
@@ -185,6 +191,6 @@ float4 PS(VS_OUTPUT input) : SV_TARGET {
 		upscaledLowerLayer = CalcMotionLayer(input, upscaledLowerLayer);
 	}
 
-    return float4(upscaledLowerLayer, 0, 0);
+    return float4(upscaledLowerLayer, 0, 1 - 1.0 / mult);
 }
 )";

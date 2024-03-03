@@ -159,6 +159,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="change_pass.hlsl.h" />
+    <ClInclude Include="copy_motion_pass.hlsl.h" />
     <ClInclude Include="framework.h" />
     <None Include="motion_pass.hlsl.h" />
     <ClInclude Include="pch.h" />

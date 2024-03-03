@@ -120,15 +120,17 @@ float4 PS(VS_OUTPUT input) : SV_TARGET {
 	float2 m = motionTex.Sample(smp, input.tex).xy;
     float2 texelsize = input.tex / input.pos.xy;
     bool pulling_from_hud = false;
-    float mmult = 0.5;
-    for (; mmult > 0; mmult -= 0.2) {
+    float mmult = motionTex.Sample(smp, input.tex).w;
+    float2 motion_in_middle = motionTex.Sample(smp, input.tex + m * mmult).xy;
+    pulling_from_hud = dot(abs(m - motion_in_middle), 1) > abs(motion_in_middle.x) + abs(motion_in_middle.y);
+    /*for (; mmult > 0; mmult -= 0.2) {
         float2 motion_in_middle = motionTex.Sample(smp, input.tex + m * mmult).xy;
         // If we are trying to pull a pixel which has low motion or significantly different motion to current pixel, try a closer pixel.
         pulling_from_hud = dot(abs(m - motion_in_middle), 1) > abs(motion_in_middle.x) + abs(motion_in_middle.y);
         if (!pulling_from_hud) {
             break;
         }
-    }
+    }*/
     if (debug) {
         if (pulling_from_hud) {
             return 1;
