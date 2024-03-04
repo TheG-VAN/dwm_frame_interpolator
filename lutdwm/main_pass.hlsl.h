@@ -118,26 +118,18 @@ float4 PS(VS_OUTPUT input) : SV_TARGET {
 		return lerp(backBufferTex.Sample(smp, input.tex), pow(1.05 - printed, 20) * float4(0, 1, 1, 1), pow(1 - printed, 10));
 	}
 	float2 m = motionTex.Sample(smp, input.tex).xy;
+    float mse = motionTex.Sample(smp, input.tex).z;
     float2 texelsize = input.tex / input.pos.xy;
     bool pulling_from_hud = false;
     float mmult = 0.5;
-    for (; mmult > 0; mmult -= 0.2) {
-        float2 motion_in_middle = motionTex.Sample(smp, input.tex + m * mmult).xy;
-        // If we are trying to pull a pixel which has low motion or significantly different motion to current pixel, try a closer pixel.
-        pulling_from_hud = dot(abs(m - motion_in_middle), 1) > abs(motion_in_middle.x) + abs(motion_in_middle.y);
-        if (!pulling_from_hud) {
-            break;
-        }
-    }
+    float2 motion_in_middle = motionTex.Sample(smp, input.tex + m * mmult).xy;
+    float motion_diff = saturate(0.05 * (-1 + (abs(m.x) + abs(m.y)) / (abs(motion_in_middle.x) + abs(motion_in_middle.y))));
     if (debug) {
-        if (pulling_from_hud) {
+        if (mse + motion_diff >= 1) {
             return 1;
         }
 	    return float4(m * 50, (m.x + m.y) * -50, 1);
     }
-    if (pulling_from_hud) {
-        return backBufferTex.Sample(smp, input.tex);
-    }
-    return backBufferTex.Sample(smp, input.tex + m * mmult);
+    return lerp(backBufferTex.Sample(smp, input.tex + m * mmult), backBufferTex.Sample(smp, input.tex), saturate(mse + motion_diff));
 }
 )";
