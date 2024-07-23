@@ -16,8 +16,6 @@ Texture2D motionLow : register(t0);
 Texture2D currTex : register(t1);
 Texture2D prevTex : register(t2);
 
-Texture2D changeTex : register(t3);
-
 int mip_gCurr : register(b0);
 int FRAME_COUNT : register(b0);
 
@@ -167,10 +165,6 @@ float3 atrous_upscale(VS_OUTPUT i) {
 }
 
 float4 PS(VS_OUTPUT input) : SV_TARGET {
-	if (changeTex.SampleLevel(lodSmp, float2(0.25, 0.5), 5).x + changeTex.SampleLevel(lodSmp, float2(0.75, 0.5), 5).x == 0) {
-		return 0;
-	}
-
 	float3 upscaledLowerLayer;
 
 	[branch]
