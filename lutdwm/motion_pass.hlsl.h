@@ -120,6 +120,10 @@ float2 median(float2 uv, float2 texelsize) {
 }
 
 float3 atrous_upscale(VS_OUTPUT i) {	
+	if (all(motionLow.SampleLevel(lodSmp, i.tex, 0).xy == 0)) {
+		return 0;
+	}
+
     float2 texelsize = (i.tex / i.pos.xy) / BLOCK_SIZE;
 	float3 localBlock[BLOCK_AREA];
 	float3 mse = 0;
