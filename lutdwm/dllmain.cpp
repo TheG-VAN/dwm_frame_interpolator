@@ -5,6 +5,7 @@
 #include <string>
 #include <sstream>
 #include <iostream>
+#include <fstream>
 #include <iomanip>
 #include <chrono>
 #include <d3d12.h>
@@ -254,7 +255,9 @@ ID3D11RenderTargetView* motionCopyRenderTarget;
 
 ID3D11Buffer* constantBuffer;
 
-int fps_multiplier = 6;
+int fps_multiplier = 2;
+
+int ctr = 0;
 
 std::chrono::high_resolution_clock::time_point time_at = std::chrono::high_resolution_clock::now();
 int fps = 0;
@@ -691,6 +694,21 @@ bool ApplyLUT(void* cOverlayContext, IDXGISwapChain* swapChain, struct tagRECT* 
 {
 	try
 	{
+		HKEY hKey;
+		LPCSTR subKey = "Software\\DwmFrameInterpolator";
+		LPCSTR valueName = "FpsMultiplier";
+		DWORD value = 0;
+		DWORD valueSize = sizeof(value);
+		if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, subKey, 0, KEY_QUERY_VALUE, &hKey) == ERROR_SUCCESS)
+		{
+			// Retrieve the value using RegGetValueA
+			if (RegGetValueA(hKey, nullptr, valueName, RRF_RT_REG_DWORD, NULL, &value, &valueSize) == ERROR_SUCCESS)
+			{
+				fps_multiplier = value;
+			}
+			RegCloseKey(hKey);
+		}
+
 		ID3D11Texture2D* backBuffer;
 		ID3D11RenderTargetView* renderTargetView;
 
