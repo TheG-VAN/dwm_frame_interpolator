@@ -27,7 +27,7 @@ float noise(float2 co) {
   return frac(sin(dot(co.xy ,float2(1.0,73))) * 437580.5453);
 }
 
-float2 CalcMotionLayer(VS_OUTPUT i, float2 searchStart) {	
+float3 CalcMotionLayer(VS_OUTPUT i, float2 searchStart) {	
 	float2 texelsize = (i.tex / i.pos.xy) / BLOCK_SIZE;
 	float3 localBlock[BLOCK_AREA];
 	float3 mse = 0;
@@ -48,7 +48,7 @@ float2 CalcMotionLayer(VS_OUTPUT i, float2 searchStart) {
 	float2 searchCenter = searchStart;
 
 	if (min_mse < 0.001) {
-		return searchStart;
+		return float3(searchStart, min_mse);
 	}
 
 	float2 left_uv = texelsize * float2(-1, 0);
@@ -73,7 +73,7 @@ float2 CalcMotionLayer(VS_OUTPUT i, float2 searchStart) {
 		}
 	}
 	if (best_uv == -1) {
-		return searchStart;
+		return float3(searchStart, min_mse);
 	}
 
 	bestMotion = sample_uvs[best_uv] + searchStart;
@@ -96,7 +96,7 @@ float2 CalcMotionLayer(VS_OUTPUT i, float2 searchStart) {
 			bestMotion = sample_uvs2[u] + searchStart;
 		}
 	}
-	return bestMotion;
+	return float3(bestMotion, min_mse);
 }
 
 // Not actually median for performance reasons, instead just pick the closest value to the mean
@@ -123,7 +123,11 @@ float2 median(float2 uv, float2 texelsize) {
 	return best;
 }
 
-float2 atrous_upscale(VS_OUTPUT i) {	
+float3 atrous_upscale(VS_OUTPUT i) {
+	if (all(motionLow.SampleLevel(lodSmp, i.tex, 0).xy == 0)) {
+		return 0;
+	}
+
     float2 texelsize = (i.tex / i.pos.xy) / BLOCK_SIZE;
 	float3 localBlock[BLOCK_AREA];
 	float3 mse = 0;
@@ -141,7 +145,7 @@ float2 atrous_upscale(VS_OUTPUT i) {
 
 	float min_mse = mse.x + mse.y + mse.z;
 	if (min_mse < 0.001) {
-		return 0;
+		return float3(0, 0, min_mse);
 	}
 
 	float2 best_motion = 0;
@@ -165,25 +169,25 @@ float2 atrous_upscale(VS_OUTPUT i) {
 		}
 	}
 	
-	return best_motion;
+	return float3(best_motion, min_mse);;
 }
 
 float4 PS(VS_OUTPUT input) : SV_TARGET {
-	if (changeTex.SampleLevel(lodSmp, float2(0.25, 0.5), 5).x + changeTex.SampleLevel(lodSmp, float2(0.75, 0.5), 5).x == 0) {
-		float4 mc = motionCopyTex.Sample(lodSmp, input.tex);
-		if (mc.w - 1.0 / mult <= 0) {
-			return 0;
+	if (mult > 2) {
+		if (changeTex.SampleLevel(lodSmp, float2(0.25, 0.5), 5).x + changeTex.SampleLevel(lodSmp, float2(0.75, 0.5), 5).x == 0) {
+			float4 mc = motionCopyTex.Sample(lodSmp, input.tex);
+			if (mc.w - 1.0 / mult <= 0) {
+				return 0;
+			}
+			return mc - float4(0, 0, 0, 1.0 / mult);
 		}
-		return mc - float4(0, 0, 0, 1.0 / mult);
 	}
 
-	float2 upscaledLowerLayer;
+	float3 upscaledLowerLayer;
 
 	[branch]
     if(mip_gCurr >= 0) {
     	upscaledLowerLayer = atrous_upscale(input);
-	} else {
-		upscaledLowerLayer = median(input.tex, 2 * input.tex / input.pos.xy);
 	}
 	
 	[branch]
@@ -191,6 +195,6 @@ float4 PS(VS_OUTPUT input) : SV_TARGET {
 		upscaledLowerLayer = CalcMotionLayer(input, upscaledLowerLayer);
 	}
 
-    return float4(upscaledLowerLayer, 0, 1 - 1.0 / mult);
+    return float4(upscaledLowerLayer, 1 - 1.0 / mult);
 }
 )";

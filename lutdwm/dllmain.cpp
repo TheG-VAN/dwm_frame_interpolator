@@ -254,6 +254,8 @@ ID3D11RenderTargetView* motionCopyRenderTarget;
 
 ID3D11Buffer* constantBuffer;
 
+int fps_multiplier = 6;
+
 std::chrono::high_resolution_clock::time_point time_at = std::chrono::high_resolution_clock::now();
 int fps = 0;
 long long frametime = 0;
@@ -324,15 +326,17 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	deviceContext->GenerateMips(currTextureView);
 
 	// change pass
-	SetVertexBuffer(rect, textureDesc[index].Width >> 4, textureDesc[index].Height >> 4);
-	deviceContext->PSSetShader(changePass, NULL, 0);
-	deviceContext->OMSetRenderTargets(1, &changeRenderTarget, NULL);
-	deviceContext->PSSetShaderResources(0, 1, &currTextureView);
-	deviceContext->PSSetShaderResources(1, 1, &prevTextureView);
-	deviceContext->PSSetSamplers(0, 1, &lodSamplerState);
+	if (fps_multiplier > 2) {
+		SetVertexBuffer(rect, textureDesc[index].Width >> 4, textureDesc[index].Height >> 4);
+		deviceContext->PSSetShader(changePass, NULL, 0);
+		deviceContext->OMSetRenderTargets(1, &changeRenderTarget, NULL);
+		deviceContext->PSSetShaderResources(0, 1, &currTextureView);
+		deviceContext->PSSetShaderResources(1, 1, &prevTextureView);
+		deviceContext->PSSetSamplers(0, 1, &lodSamplerState);
 
-	deviceContext->Draw(numVerts, 0);
-	deviceContext->GenerateMips(changeTextureView);
+		deviceContext->Draw(numVerts, 0);
+		deviceContext->GenerateMips(changeTextureView);
+	}
 
 	// motion passes
 	deviceContext->PSSetShader(motionPass, NULL, 0);
@@ -349,20 +353,22 @@ void DrawRectangle(struct tagRECT* rect, int index)
 
 		SetVertexBuffer(rect, backBufferDesc.Width >> (3 + mip_level), backBufferDesc.Height >> (3 + mip_level));
 
-		int constantData[3] = { mip_level, frame_count, 6 };
+		int constantData[3] = { mip_level, frame_count, fps_multiplier };
 		SetConstantBuffer(constantData, 3);
 
 		deviceContext->Draw(numVerts, 0);
 	}
 
 	// copy motion pass
-	deviceContext->PSSetShader(copyMotionPass, NULL, 0);
-	deviceContext->OMSetRenderTargets(1, &motionCopyRenderTarget, NULL);
-	deviceContext->PSSetShaderResources(0, 1, views[0]);
-	deviceContext->PSSetSamplers(0, 1, &lodSamplerState);
+	if (fps_multiplier > 2) {
+		deviceContext->PSSetShader(copyMotionPass, NULL, 0);
+		deviceContext->OMSetRenderTargets(1, &motionCopyRenderTarget, NULL);
+		deviceContext->PSSetShaderResources(0, 1, views[0]);
+		deviceContext->PSSetSamplers(0, 1, &lodSamplerState);
 
-	SetVertexBuffer(rect, backBufferDesc.Width >> 3, backBufferDesc.Height >> 3);
-	deviceContext->Draw(numVerts, 0);
+		SetVertexBuffer(rect, backBufferDesc.Width >> 3, backBufferDesc.Height >> 3);
+		deviceContext->Draw(numVerts, 0);
+	}
 
 	// main pass
 	SetVertexBuffer(rect, textureDesc[index].Width, textureDesc[index].Height);
