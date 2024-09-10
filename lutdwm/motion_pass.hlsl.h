@@ -16,8 +16,12 @@ Texture2D motionLow : register(t0);
 Texture2D currTex : register(t1);
 Texture2D prevTex : register(t2);
 
+Texture2D changeTex : register(t3);
+Texture2D motionCopyTex : register(t4);
+
 int mip_gCurr : register(b0);
 int FRAME_COUNT : register(b0);
+int mult : register(b0);
 
 float noise(float2 co) {
   return frac(sin(dot(co.xy ,float2(1.0,73))) * 437580.5453);
@@ -119,7 +123,7 @@ float2 median(float2 uv, float2 texelsize) {
 	return best;
 }
 
-float3 atrous_upscale(VS_OUTPUT i) {	
+float3 atrous_upscale(VS_OUTPUT i) {
 	if (all(motionLow.SampleLevel(lodSmp, i.tex, 0).xy == 0)) {
 		return 0;
 	}
@@ -165,10 +169,20 @@ float3 atrous_upscale(VS_OUTPUT i) {
 		}
 	}
 	
-	return float3(best_motion, min_mse);
+	return float3(best_motion, min_mse);;
 }
 
 float4 PS(VS_OUTPUT input) : SV_TARGET {
+	if (mult > 2) {
+		if (changeTex.SampleLevel(lodSmp, float2(0.25, 0.5), 5).x + changeTex.SampleLevel(lodSmp, float2(0.75, 0.5), 5).x == 0) {
+			float4 mc = motionCopyTex.Sample(lodSmp, input.tex);
+			if (mc.w - 1.0 / mult <= 0) {
+				return 0;
+			}
+			return mc - float4(0, 0, 0, 1.0 / mult);
+		}
+	}
+
 	float3 upscaledLowerLayer;
 
 	[branch]
@@ -181,6 +195,6 @@ float4 PS(VS_OUTPUT input) : SV_TARGET {
 		upscaledLowerLayer = CalcMotionLayer(input, upscaledLowerLayer);
 	}
 
-    return float4(upscaledLowerLayer, 0);
+    return float4(upscaledLowerLayer, 1 - 1.0 / mult);
 }
 )";

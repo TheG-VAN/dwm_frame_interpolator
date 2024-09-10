@@ -5,6 +5,7 @@
 #include <string>
 #include <sstream>
 #include <iostream>
+#include <fstream>
 #include <iomanip>
 #include <chrono>
 #include <d3d12.h>
@@ -13,6 +14,7 @@
 #include "curr_pass.hlsl.h"
 #include "motion_pass.hlsl.h"
 #include "change_pass.hlsl.h"
+#include "copy_motion_pass.hlsl.h"
 #pragma comment (lib, "d3d11.lib") // Maybe un-useful
 #pragma comment (lib, "d3dcompiler.lib")
 #pragma comment (lib, "dxgi.lib") // Maybe un-useful
@@ -93,12 +95,12 @@ void print_error(const char* prefix_message)
 	DWORD errorCode = GetLastError();
 	LPSTR errorMessage = nullptr;
 	FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-	               nullptr, errorCode, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR)&errorMessage, 0, nullptr);
+		nullptr, errorCode, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPSTR)&errorMessage, 0, nullptr);
 
 	char message_buf[100];
 	sprintf(message_buf, "%s: %s - error code: %u", prefix_message, errorMessage, errorCode);
 	MESSAGE_BOX_DBG(message_buf, MB_OK | MB_ICONWARNING)
-	return;
+		return;
 }
 
 void log_to_file(const char* log_buf)
@@ -193,13 +195,13 @@ bool aob_match_inverse(const void* buf1, const void* mask, const int buf_len)
 	return false;
 }
 
-ID3D11Device *device;
-ID3D11DeviceContext *deviceContext;
-ID3D11VertexShader *vertexShader;
-ID3D11PixelShader *mainPass;
-ID3D11InputLayout *inputLayout;
+ID3D11Device* device;
+ID3D11DeviceContext* deviceContext;
+ID3D11VertexShader* vertexShader;
+ID3D11PixelShader* mainPass;
+ID3D11InputLayout* inputLayout;
 
-ID3D11Buffer *vertexBuffer;
+ID3D11Buffer* vertexBuffer;
 UINT numVerts;
 UINT stride;
 UINT offset;
@@ -207,17 +209,17 @@ UINT offset;
 D3D11_TEXTURE2D_DESC backBufferDesc;
 D3D11_TEXTURE2D_DESC textureDesc[2];
 
-ID3D11SamplerState *pointSamplerState;
-ID3D11Texture2D *texture[2];
-ID3D11ShaderResourceView *textureView[2];
+ID3D11SamplerState* pointSamplerState;
+ID3D11Texture2D* texture[2];
+ID3D11ShaderResourceView* textureView[2];
 
-ID3D11PixelShader *currPass;
-ID3D11SamplerState *lodSamplerState;
-ID3D11ShaderResourceView *currTextureView;
-ID3D11RenderTargetView *currRenderTarget;
+ID3D11PixelShader* currPass;
+ID3D11SamplerState* lodSamplerState;
+ID3D11ShaderResourceView* currTextureView;
+ID3D11RenderTargetView* currRenderTarget;
 
-ID3D11ShaderResourceView *prevTextureView;
-ID3D11RenderTargetView *prevRenderTarget;
+ID3D11ShaderResourceView* prevTextureView;
+ID3D11RenderTargetView* prevRenderTarget;
 
 ID3D11PixelShader* motionPass;
 ID3D11ShaderResourceView* motion0TextureView;
@@ -243,7 +245,19 @@ ID3D11RenderTargetView* motion9RenderTarget;
 ID3D11ShaderResourceView** views[] = { &motion0TextureView, &motion1TextureView, &motion2TextureView, &motion3TextureView, &motion4TextureView, &motion5TextureView, &motion6TextureView, &motion7TextureView, &motion8TextureView, &motion9TextureView };
 ID3D11RenderTargetView** targets[] = { &motion0RenderTarget, &motion1RenderTarget, &motion2RenderTarget, &motion3RenderTarget, &motion4RenderTarget, &motion5RenderTarget, &motion6RenderTarget, &motion7RenderTarget, &motion8RenderTarget, &motion9RenderTarget };
 
+ID3D11PixelShader* changePass;
+ID3D11ShaderResourceView* changeTextureView;
+ID3D11RenderTargetView* changeRenderTarget;
+
+ID3D11PixelShader* copyMotionPass;
+ID3D11ShaderResourceView* motionCopyTextureView;
+ID3D11RenderTargetView* motionCopyRenderTarget;
+
 ID3D11Buffer* constantBuffer;
+
+int fps_multiplier = 2;
+
+int ctr = 0;
 
 std::chrono::high_resolution_clock::time_point time_at = std::chrono::high_resolution_clock::now();
 int fps = 0;
@@ -314,6 +328,19 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	deviceContext->Draw(numVerts, 0);
 	deviceContext->GenerateMips(currTextureView);
 
+	// change pass
+	if (fps_multiplier > 2) {
+		SetVertexBuffer(rect, textureDesc[index].Width >> 4, textureDesc[index].Height >> 4);
+		deviceContext->PSSetShader(changePass, NULL, 0);
+		deviceContext->OMSetRenderTargets(1, &changeRenderTarget, NULL);
+		deviceContext->PSSetShaderResources(0, 1, &currTextureView);
+		deviceContext->PSSetShaderResources(1, 1, &prevTextureView);
+		deviceContext->PSSetSamplers(0, 1, &lodSamplerState);
+
+		deviceContext->Draw(numVerts, 0);
+		deviceContext->GenerateMips(changeTextureView);
+	}
+
 	// motion passes
 	deviceContext->PSSetShader(motionPass, NULL, 0);
 	static int frame_count = 0;
@@ -324,12 +351,25 @@ void DrawRectangle(struct tagRECT* rect, int index)
 		deviceContext->PSSetSamplers(0, 1, &lodSamplerState);
 		deviceContext->PSSetShaderResources(1, 1, &currTextureView);
 		deviceContext->PSSetShaderResources(2, 1, &prevTextureView);
+		deviceContext->PSSetShaderResources(3, 1, &changeTextureView);
+		deviceContext->PSSetShaderResources(4, 1, &motionCopyTextureView);
 
 		SetVertexBuffer(rect, backBufferDesc.Width >> (3 + mip_level), backBufferDesc.Height >> (3 + mip_level));
 
-		int constantData[2] = { mip_level, frame_count };
-		SetConstantBuffer(constantData, 2);
+		int constantData[3] = { mip_level, frame_count, fps_multiplier };
+		SetConstantBuffer(constantData, 3);
 
+		deviceContext->Draw(numVerts, 0);
+	}
+
+	// copy motion pass
+	if (fps_multiplier > 2) {
+		deviceContext->PSSetShader(copyMotionPass, NULL, 0);
+		deviceContext->OMSetRenderTargets(1, &motionCopyRenderTarget, NULL);
+		deviceContext->PSSetShaderResources(0, 1, views[0]);
+		deviceContext->PSSetSamplers(0, 1, &lodSamplerState);
+
+		SetVertexBuffer(rect, backBufferDesc.Width >> 3, backBufferDesc.Height >> 3);
 		deviceContext->Draw(numVerts, 0);
 	}
 
@@ -373,29 +413,29 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 	try
 	{
 		EXECUTE_WITH_LOG(swapChain->GetDevice(IID_ID3D11Device, (void**)&device))
-		LOG_ADDRESS("Current swapchain address is: ", swapChain)
-		LOG_ONLY_ONCE("Device successfully gathered")
-		LOG_ADDRESS("The device address is: ", device)
+			LOG_ADDRESS("Current swapchain address is: ", swapChain)
+			LOG_ONLY_ONCE("Device successfully gathered")
+			LOG_ADDRESS("The device address is: ", device)
 
-		device->GetImmediateContext(&deviceContext);
+			device->GetImmediateContext(&deviceContext);
 		LOG_ONLY_ONCE("Got context after device")
-		LOG_ADDRESS("The Device context is located at address: ", deviceContext)
+			LOG_ADDRESS("The Device context is located at address: ", deviceContext)
 		{
 			ID3DBlob* vsBlob;
 			ID3DBlob* compile_error_interface;
 			LOG_ONLY_ONCE(("Trying to compile vshader with this code:\n" + std::string(vertex_shader)).c_str())
-			EXECUTE_D3DCOMPILE_WITH_LOG(
-				D3DCompile(vertex_shader, sizeof vertex_shader, NULL, NULL, NULL, "VS", "vs_5_0", 0, 0, &vsBlob, &
-					compile_error_interface), compile_error_interface)
+				EXECUTE_D3DCOMPILE_WITH_LOG(
+					D3DCompile(vertex_shader, sizeof vertex_shader, NULL, NULL, NULL, "VS", "vs_5_0", 0, 0, &vsBlob, &
+						compile_error_interface), compile_error_interface)
 
 
-			LOG_ONLY_ONCE("Vertex shader compiled successfully")
-			EXECUTE_WITH_LOG(device->CreateVertexShader(vsBlob->GetBufferPointer(),
-				vsBlob->GetBufferSize(), NULL, &vertexShader))
+				LOG_ONLY_ONCE("Vertex shader compiled successfully")
+				EXECUTE_WITH_LOG(device->CreateVertexShader(vsBlob->GetBufferPointer(),
+					vsBlob->GetBufferSize(), NULL, &vertexShader))
 
 
-			LOG_ONLY_ONCE("Vertex shader created successfully")
-			D3D11_INPUT_ELEMENT_DESC inputElementDesc[] =
+				LOG_ONLY_ONCE("Vertex shader created successfully")
+				D3D11_INPUT_ELEMENT_DESC inputElementDesc[] =
 			{
 				{"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0, D3D11_INPUT_PER_VERTEX_DATA, 0},
 				{
@@ -407,7 +447,7 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 				vsBlob->GetBufferPointer(),
 				vsBlob->GetBufferSize(), &inputLayout))
 
-			vsBlob->Release();
+				vsBlob->Release();
 		}
 		{
 			ID3DBlob* psBlob;
@@ -416,9 +456,9 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 				D3DCompile(main_pass, sizeof main_pass, NULL, NULL, NULL, "PS", "ps_5_0", 0, 0, &psBlob, &
 					compile_error_interface), compile_error_interface)
 
-			LOG_ONLY_ONCE("Pixel shader compiled successfully")
-			device->CreatePixelShader(psBlob->GetBufferPointer(),
-			                          psBlob->GetBufferSize(), NULL, &mainPass);
+				LOG_ONLY_ONCE("Pixel shader compiled successfully")
+				device->CreatePixelShader(psBlob->GetBufferPointer(),
+					psBlob->GetBufferSize(), NULL, &mainPass);
 			psBlob->Release();
 		}
 		{
@@ -449,8 +489,8 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 				D3DCompile(curr_pass, sizeof curr_pass, NULL, NULL, NULL, "PS", "ps_5_0", 0, 0, &psBlob, &
 					compile_error_interface), compile_error_interface)
 
-			LOG_ONLY_ONCE("Pixel shader compiled successfully")
-			device->CreatePixelShader(psBlob->GetBufferPointer(),
+				LOG_ONLY_ONCE("Pixel shader compiled successfully")
+				device->CreatePixelShader(psBlob->GetBufferPointer(),
 					psBlob->GetBufferSize(), NULL, &currPass);
 			psBlob->Release();
 		}
@@ -461,9 +501,33 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 				D3DCompile(motion_pass, sizeof motion_pass, NULL, NULL, NULL, "PS", "ps_5_0", 0, 0, &psBlob, &
 					compile_error_interface), compile_error_interface)
 
-			LOG_ONLY_ONCE("Pixel shader compiled successfully")
-			device->CreatePixelShader(psBlob->GetBufferPointer(),
+				LOG_ONLY_ONCE("Pixel shader compiled successfully")
+				device->CreatePixelShader(psBlob->GetBufferPointer(),
 					psBlob->GetBufferSize(), NULL, &motionPass);
+			psBlob->Release();
+		}
+		{
+			ID3DBlob* psBlob;
+			ID3DBlob* compile_error_interface;
+			EXECUTE_D3DCOMPILE_WITH_LOG(
+				D3DCompile(change_pass, sizeof change_pass, NULL, NULL, NULL, "PS", "ps_5_0", 0, 0, &psBlob, &
+					compile_error_interface), compile_error_interface)
+
+				LOG_ONLY_ONCE("Pixel shader compiled successfully")
+				device->CreatePixelShader(psBlob->GetBufferPointer(),
+					psBlob->GetBufferSize(), NULL, &changePass);
+			psBlob->Release();
+		}
+		{
+			ID3DBlob* psBlob;
+			ID3DBlob* compile_error_interface;
+			EXECUTE_D3DCOMPILE_WITH_LOG(
+				D3DCompile(copy_motion_pass, sizeof copy_motion_pass, NULL, NULL, NULL, "PS", "ps_5_0", 0, 0, &psBlob, &
+					compile_error_interface), compile_error_interface)
+
+				LOG_ONLY_ONCE("Pixel shader compiled successfully")
+				device->CreatePixelShader(psBlob->GetBufferPointer(),
+					psBlob->GetBufferSize(), NULL, &copyMotionPass);
 			psBlob->Release();
 		}
 		{
@@ -491,9 +555,9 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 
 			ID3D11Texture2D* tex;
 			EXECUTE_WITH_LOG(device->CreateTexture2D(&desc, NULL, &tex))
-			EXECUTE_WITH_LOG(device->CreateShaderResourceView((ID3D11Resource*)tex, NULL, &currTextureView))
-			EXECUTE_WITH_LOG(device->CreateRenderTargetView((ID3D11Resource*)tex, NULL, &currRenderTarget))
-			tex->Release();
+				EXECUTE_WITH_LOG(device->CreateShaderResourceView((ID3D11Resource*)tex, NULL, &currTextureView))
+				EXECUTE_WITH_LOG(device->CreateRenderTargetView((ID3D11Resource*)tex, NULL, &currRenderTarget))
+				tex->Release();
 		}
 		{
 			D3D11_TEXTURE2D_DESC desc = {};
@@ -510,9 +574,9 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 
 			ID3D11Texture2D* tex;
 			EXECUTE_WITH_LOG(device->CreateTexture2D(&desc, NULL, &tex))
-			EXECUTE_WITH_LOG(device->CreateShaderResourceView((ID3D11Resource*)tex, NULL, &prevTextureView))
-			EXECUTE_WITH_LOG(device->CreateRenderTargetView((ID3D11Resource*)tex, NULL, &prevRenderTarget))
-			tex->Release();
+				EXECUTE_WITH_LOG(device->CreateShaderResourceView((ID3D11Resource*)tex, NULL, &prevTextureView))
+				EXECUTE_WITH_LOG(device->CreateRenderTargetView((ID3D11Resource*)tex, NULL, &prevRenderTarget))
+				tex->Release();
 		}
 		{
 			for (int i = 0; i <= 6; i++) {
@@ -530,9 +594,9 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 
 				ID3D11Texture2D* tex;
 				EXECUTE_WITH_LOG(device->CreateTexture2D(&desc, NULL, &tex))
-				EXECUTE_WITH_LOG(device->CreateShaderResourceView((ID3D11Resource*)tex, NULL, views[i]))
-				EXECUTE_WITH_LOG(device->CreateRenderTargetView((ID3D11Resource*)tex, NULL, targets[i]))
-				tex->Release();
+					EXECUTE_WITH_LOG(device->CreateShaderResourceView((ID3D11Resource*)tex, NULL, views[i]))
+					EXECUTE_WITH_LOG(device->CreateRenderTargetView((ID3D11Resource*)tex, NULL, targets[i]))
+					tex->Release();
 			}
 		}
 		{
@@ -544,61 +608,114 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 
 			EXECUTE_WITH_LOG(device->CreateBuffer(&constantBufferDesc, NULL, &constantBuffer))
 		}
+		{
+			D3D11_TEXTURE2D_DESC desc = {};
+			desc.Width = backBufferDesc.Width >> 4;
+			desc.Height = backBufferDesc.Height >> 4;
+			desc.MipLevels = 0;
+			desc.ArraySize = 1;
+			desc.Format = DXGI_FORMAT_R8_UNORM;
+			desc.SampleDesc.Count = 1;
+			desc.Usage = D3D11_USAGE_DEFAULT;
+			desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+			desc.CPUAccessFlags = 0;
+			desc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
+
+			ID3D11Texture2D* tex;
+			EXECUTE_WITH_LOG(device->CreateTexture2D(&desc, NULL, &tex))
+				EXECUTE_WITH_LOG(device->CreateShaderResourceView((ID3D11Resource*)tex, NULL, &changeTextureView))
+				EXECUTE_WITH_LOG(device->CreateRenderTargetView((ID3D11Resource*)tex, NULL, &changeRenderTarget))
+				tex->Release();
+		}
+		{
+			D3D11_TEXTURE2D_DESC desc = {};
+			desc.Width = backBufferDesc.Width >> 3;
+			desc.Height = backBufferDesc.Height >> 3;
+			desc.MipLevels = 0;
+			desc.ArraySize = 1;
+			desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
+			desc.SampleDesc.Count = 1;
+			desc.Usage = D3D11_USAGE_DEFAULT;
+			desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+			desc.CPUAccessFlags = 0;
+			desc.MiscFlags = 0;
+
+			ID3D11Texture2D* tex;
+			EXECUTE_WITH_LOG(device->CreateTexture2D(&desc, NULL, &tex))
+				EXECUTE_WITH_LOG(device->CreateShaderResourceView((ID3D11Resource*)tex, NULL, &motionCopyTextureView))
+				EXECUTE_WITH_LOG(device->CreateRenderTargetView((ID3D11Resource*)tex, NULL, &motionCopyRenderTarget))
+				tex->Release();
+		}
 	}
 	catch (std::exception& ex)
 	{
 		std::stringstream ex_message;
 		ex_message << "Exception caught at line " << __LINE__ << ": " << ex.what() << std::endl;
 		LOG_ONLY_ONCE(ex_message.str().c_str())
-		throw;
+			throw;
 	}
 	catch (...)
 	{
 		std::stringstream ex_message;
 		ex_message << "Exception caught at line " << __LINE__ << ": " << std::endl;
 		LOG_ONLY_ONCE(ex_message.str().c_str())
-		throw;
+			throw;
 	}
 }
 
 void UninitializeStuff()
 {
 	RELEASE_IF_NOT_NULL(device)
-	RELEASE_IF_NOT_NULL(deviceContext)
-	RELEASE_IF_NOT_NULL(vertexShader)
-	RELEASE_IF_NOT_NULL(mainPass)
-	RELEASE_IF_NOT_NULL(inputLayout)
-	RELEASE_IF_NOT_NULL(vertexBuffer)
-	RELEASE_IF_NOT_NULL(pointSamplerState)
-	for (int i = 0; i < 2; i++)
-	{
-		RELEASE_IF_NOT_NULL(texture[i])
-		RELEASE_IF_NOT_NULL(textureView[i])
-	}
+		RELEASE_IF_NOT_NULL(deviceContext)
+		RELEASE_IF_NOT_NULL(vertexShader)
+		RELEASE_IF_NOT_NULL(mainPass)
+		RELEASE_IF_NOT_NULL(inputLayout)
+		RELEASE_IF_NOT_NULL(vertexBuffer)
+		RELEASE_IF_NOT_NULL(pointSamplerState)
+		for (int i = 0; i < 2; i++)
+		{
+			RELEASE_IF_NOT_NULL(texture[i])
+				RELEASE_IF_NOT_NULL(textureView[i])
+		}
 	RELEASE_IF_NOT_NULL(currPass)
-	RELEASE_IF_NOT_NULL(lodSamplerState)
-	RELEASE_IF_NOT_NULL(currTextureView)
-	RELEASE_IF_NOT_NULL(currRenderTarget)
-	RELEASE_IF_NOT_NULL(prevTextureView)
-	RELEASE_IF_NOT_NULL(prevRenderTarget)
-	RELEASE_IF_NOT_NULL(constantBuffer)
-	for (int i = 0; i <= 9; i++) {
-		RELEASE_IF_NOT_NULL((*views[i]))
-		RELEASE_IF_NOT_NULL((*targets[i]))
-	}
+		RELEASE_IF_NOT_NULL(lodSamplerState)
+		RELEASE_IF_NOT_NULL(currTextureView)
+		RELEASE_IF_NOT_NULL(currRenderTarget)
+		RELEASE_IF_NOT_NULL(prevTextureView)
+		RELEASE_IF_NOT_NULL(prevRenderTarget)
+		RELEASE_IF_NOT_NULL(constantBuffer)
+		for (int i = 0; i <= 9; i++) {
+			RELEASE_IF_NOT_NULL((*views[i]))
+				RELEASE_IF_NOT_NULL((*targets[i]))
+		}
 }
 
 bool ApplyLUT(void* cOverlayContext, IDXGISwapChain* swapChain, struct tagRECT* rects, int numRects)
 {
 	try
 	{
+		HKEY hKey;
+		LPCSTR subKey = "Software\\DwmFrameInterpolator";
+		LPCSTR valueName = "FpsMultiplier";
+		DWORD value = 0;
+		DWORD valueSize = sizeof(value);
+		if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, subKey, 0, KEY_QUERY_VALUE, &hKey) == ERROR_SUCCESS)
+		{
+			// Retrieve the value using RegGetValueA
+			if (RegGetValueA(hKey, nullptr, valueName, RRF_RT_REG_DWORD, NULL, &value, &valueSize) == ERROR_SUCCESS)
+			{
+				fps_multiplier = value;
+			}
+			RegCloseKey(hKey);
+		}
+
 		ID3D11Texture2D* backBuffer;
 		ID3D11RenderTargetView* renderTargetView;
 
 
 		EXECUTE_WITH_LOG(swapChain->GetBuffer(0, IID_ID3D11Texture2D, (void**)&backBuffer))
 
-		backBuffer->GetDesc(&backBufferDesc);
+			backBuffer->GetDesc(&backBufferDesc);
 
 		if (!device)
 		{
@@ -607,7 +724,7 @@ bool ApplyLUT(void* cOverlayContext, IDXGISwapChain* swapChain, struct tagRECT* 
 		}
 		LOG_ONLY_ONCE("Init done, continuing with LUT application")
 
-		int index = -1;
+			int index = -1;
 		if (backBufferDesc.Format == DXGI_FORMAT_B8G8R8A8_UNORM)
 		{
 			index = 0;
@@ -642,12 +759,12 @@ bool ApplyLUT(void* cOverlayContext, IDXGISwapChain* swapChain, struct tagRECT* 
 			textureDesc[index] = newTextureDesc;
 
 			EXECUTE_WITH_LOG(device->CreateTexture2D(&textureDesc[index], NULL, &texture[index]))
-			EXECUTE_WITH_LOG(
-				device->CreateShaderResourceView((ID3D11Resource*)texture[index], NULL, &textureView[index]))
+				EXECUTE_WITH_LOG(
+					device->CreateShaderResourceView((ID3D11Resource*)texture[index], NULL, &textureView[index]))
 		}
 
 		EXECUTE_WITH_LOG(device->CreateRenderTargetView((ID3D11Resource*)backBuffer, NULL, &renderTargetView))
-		const D3D11_VIEWPORT d3d11_viewport(0, 0, backBufferDesc.Width, backBufferDesc.Height, 0.0f, 1.0f);
+			const D3D11_VIEWPORT d3d11_viewport(0, 0, backBufferDesc.Width, backBufferDesc.Height, 0.0f, 1.0f);
 		deviceContext->RSSetViewports(1, &d3d11_viewport);
 
 		deviceContext->OMSetRenderTargets(1, &renderTargetView, NULL);
@@ -673,7 +790,7 @@ bool ApplyLUT(void* cOverlayContext, IDXGISwapChain* swapChain, struct tagRECT* 
 			sourceRegion.back = 1;
 
 			deviceContext->CopySubresourceRegion((ID3D11Resource*)texture[index], 0, rects[i].left,
-			                                     rects[i].top, 0, (ID3D11Resource*)backBuffer, 0, &sourceRegion);
+				rects[i].top, 0, (ID3D11Resource*)backBuffer, 0, &sourceRegion);
 			DrawRectangle(&rects[i], index);
 		}
 
@@ -685,14 +802,14 @@ bool ApplyLUT(void* cOverlayContext, IDXGISwapChain* swapChain, struct tagRECT* 
 		std::stringstream ex_message;
 		ex_message << "Exception caught at line " << __LINE__ << ": " << ex.what() << std::endl;
 		LOG_ONLY_ONCE(ex_message.str().c_str())
-		return false;
+			return false;
 	}
 	catch (...)
 	{
 		std::stringstream ex_message;
 		ex_message << "Exception caught at line " << __LINE__ << std::endl;
 		LOG_ONLY_ONCE(ex_message.str().c_str())
-		return false;
+			return false;
 	}
 }
 
@@ -710,66 +827,66 @@ COverlayContext_Present_t* COverlayContext_Present_real_orig;
 
 
 long COverlayContext_Present_hook(void* self, void* overlaySwapChain, unsigned int a3, rectVec* rectVec,
-                                  unsigned int a5, bool a6)
+	unsigned int a5, bool a6)
 {
 	if (_ReturnAddress() < (void*)COverlayContext_Present_real_orig)
 	{
 		LOG_ONLY_ONCE("I am inside COverlayContext::Present hook inside the main if condition")
 
-		if (isWindows11 && *((bool*)overlaySwapChain + IOverlaySwapChain_HardwareProtected_offset_w11) ||
-			!isWindows11 && *((bool*)overlaySwapChain + IOverlaySwapChain_HardwareProtected_offset))
-		{
-			std::stringstream hw_protection_message;
-			hw_protection_message << "I'm inside the Hardware protection condition - 0x" << std::hex << (bool*)
-				overlaySwapChain + IOverlaySwapChain_HardwareProtected_offset_w11 << " - value: 0x" << *((bool*)
-					overlaySwapChain + IOverlaySwapChain_HardwareProtected_offset_w11);
-			LOG_ONLY_ONCE(hw_protection_message.str().c_str())
-		}
-		else
-		{
-			std::stringstream hw_protection_message;
-			hw_protection_message << "I'm outside the Hardware protection condition - 0x" << std::hex << (bool*)
-				overlaySwapChain + IOverlaySwapChain_HardwareProtected_offset_w11 << " - value: 0x" << *((bool*)
-					overlaySwapChain + IOverlaySwapChain_HardwareProtected_offset_w11);
-			LOG_ONLY_ONCE(hw_protection_message.str().c_str())
-
-			IDXGISwapChain* swapChain;
-			if (isWindows11)
+			if (isWindows11 && *((bool*)overlaySwapChain + IOverlaySwapChain_HardwareProtected_offset_w11) ||
+				!isWindows11 && *((bool*)overlaySwapChain + IOverlaySwapChain_HardwareProtected_offset))
 			{
-				LOG_ONLY_ONCE("Gathering IDXGISwapChain pointer")
-				int sub_from_legacy_swapchain = *(int*)((unsigned char*)overlaySwapChain - 4);
-				void* real_overlay_swap_chain = (unsigned char*)overlaySwapChain - sub_from_legacy_swapchain -
-					0x1b0;
-				swapChain = *(IDXGISwapChain**)((unsigned char*)real_overlay_swap_chain +
-					IOverlaySwapChain_IDXGISwapChain_offset_w11);
+				std::stringstream hw_protection_message;
+				hw_protection_message << "I'm inside the Hardware protection condition - 0x" << std::hex << (bool*)
+					overlaySwapChain + IOverlaySwapChain_HardwareProtected_offset_w11 << " - value: 0x" << *((bool*)
+						overlaySwapChain + IOverlaySwapChain_HardwareProtected_offset_w11);
+				LOG_ONLY_ONCE(hw_protection_message.str().c_str())
 			}
 			else
 			{
-				swapChain = *(IDXGISwapChain**)((unsigned char*)overlaySwapChain +
-					IOverlaySwapChain_IDXGISwapChain_offset);
-			}
+				std::stringstream hw_protection_message;
+				hw_protection_message << "I'm outside the Hardware protection condition - 0x" << std::hex << (bool*)
+					overlaySwapChain + IOverlaySwapChain_HardwareProtected_offset_w11 << " - value: 0x" << *((bool*)
+						overlaySwapChain + IOverlaySwapChain_HardwareProtected_offset_w11);
+				LOG_ONLY_ONCE(hw_protection_message.str().c_str())
 
-			if (ApplyLUT(self, swapChain, rectVec->start, rectVec->end - rectVec->start))
-			{
-				LOG_ONLY_ONCE("Setting LUTactive")
+					IDXGISwapChain* swapChain;
+				if (isWindows11)
+				{
+					LOG_ONLY_ONCE("Gathering IDXGISwapChain pointer")
+						int sub_from_legacy_swapchain = *(int*)((unsigned char*)overlaySwapChain - 4);
+					void* real_overlay_swap_chain = (unsigned char*)overlaySwapChain - sub_from_legacy_swapchain -
+						0x1b0;
+					swapChain = *(IDXGISwapChain**)((unsigned char*)real_overlay_swap_chain +
+						IOverlaySwapChain_IDXGISwapChain_offset_w11);
+				}
+				else
+				{
+					swapChain = *(IDXGISwapChain**)((unsigned char*)overlaySwapChain +
+						IOverlaySwapChain_IDXGISwapChain_offset);
+				}
+
+				if (ApplyLUT(self, swapChain, rectVec->start, rectVec->end - rectVec->start))
+				{
+					LOG_ONLY_ONCE("Setting LUTactive")
+				}
+				else
+				{
+					LOG_ONLY_ONCE("Un-setting LUTactive")
+				}
 			}
-			else
-			{
-				LOG_ONLY_ONCE("Un-setting LUTactive")
-			}
-		}
 	}
 
 	return COverlayContext_Present_orig(self, overlaySwapChain, a3, rectVec, a5, a6);
 }
 
 typedef bool (COverlayContext_IsCandidateDirectFlipCompatbile_t)(void*, void*, void*, void*, int, unsigned int, bool,
-                                                                 bool);
+	bool);
 
 COverlayContext_IsCandidateDirectFlipCompatbile_t* COverlayContext_IsCandidateDirectFlipCompatbile_orig;
 
 bool COverlayContext_IsCandidateDirectFlipCompatbile_hook(void* self, void* a2, void* a3, void* a4, int a5,
-                                                          unsigned int a6, bool a7, bool a8)
+	unsigned int a6, bool a7, bool a8)
 {
 	return COverlayContext_IsCandidateDirectFlipCompatbile_orig(self, a2, a3, a4, a5, a6, a7, a8);
 }
@@ -788,151 +905,151 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID lpReserved)
 	switch (fdwReason)
 	{
 	case DLL_PROCESS_ATTACH:
+	{
+		HMODULE dwmcore = GetModuleHandle(L"dwmcore.dll");
+		MODULEINFO moduleInfo;
+		GetModuleInformation(GetCurrentProcess(), dwmcore, &moduleInfo, sizeof moduleInfo);
+
+		OSVERSIONINFOEX versionInfo;
+		ZeroMemory(&versionInfo, sizeof OSVERSIONINFOEX);
+		versionInfo.dwOSVersionInfoSize = sizeof OSVERSIONINFOEX;
+		versionInfo.dwBuildNumber = 22000;
+
+		ULONGLONG dwlConditionMask = 0;
+		VER_SET_CONDITION(dwlConditionMask, VER_BUILDNUMBER, VER_GREATER_EQUAL);
+
+		if (VerifyVersionInfo(&versionInfo, VER_BUILDNUMBER, dwlConditionMask))
 		{
-			HMODULE dwmcore = GetModuleHandle(L"dwmcore.dll");
-			MODULEINFO moduleInfo;
-			GetModuleInformation(GetCurrentProcess(), dwmcore, &moduleInfo, sizeof moduleInfo);
+			isWindows11 = true;
+		}
+		else
+		{
+			isWindows11 = false;
+		}
 
-			OSVERSIONINFOEX versionInfo;
-			ZeroMemory(&versionInfo, sizeof OSVERSIONINFOEX);
-			versionInfo.dwOSVersionInfoSize = sizeof OSVERSIONINFOEX;
-			versionInfo.dwBuildNumber = 22000;
+		// TODO: Remove this debug instruction
+		//MESSAGE_BOX_DBG("DWM LUT ATTACH", MB_OK)
 
-			ULONGLONG dwlConditionMask = 0;
-			VER_SET_CONDITION(dwlConditionMask, VER_BUILDNUMBER, VER_GREATER_EQUAL);
-
-			if (VerifyVersionInfo(&versionInfo, VER_BUILDNUMBER, dwlConditionMask))
-			{
-				isWindows11 = true;
-			}
-			else
-			{
-				isWindows11 = false;
-			}
-
+		if (isWindows11)
+		{
 			// TODO: Remove this debug instruction
-			//MESSAGE_BOX_DBG("DWM LUT ATTACH", MB_OK)
+			//MESSAGE_BOX_DBG("DETECTED WINDOWS 11 OS", MB_OK)
 
-			if (isWindows11)
+			for (size_t i = 0; i <= moduleInfo.SizeOfImage - sizeof COverlayContext_OverlaysEnabled_bytes_w11; i++)
 			{
-				// TODO: Remove this debug instruction
-				//MESSAGE_BOX_DBG("DETECTED WINDOWS 11 OS", MB_OK)
-
-				for (size_t i = 0; i <= moduleInfo.SizeOfImage - sizeof COverlayContext_OverlaysEnabled_bytes_w11; i++)
+				unsigned char* address = (unsigned char*)dwmcore + i;
+				if (!COverlayContext_Present_orig && sizeof COverlayContext_Present_bytes_w11 <= moduleInfo.
+					SizeOfImage - i && !aob_match_inverse(address, COverlayContext_Present_bytes_w11,
+						sizeof COverlayContext_Present_bytes_w11))
 				{
-					unsigned char* address = (unsigned char*)dwmcore + i;
-					if (!COverlayContext_Present_orig && sizeof COverlayContext_Present_bytes_w11 <= moduleInfo.
-						SizeOfImage - i && !aob_match_inverse(address, COverlayContext_Present_bytes_w11,
-						                                      sizeof COverlayContext_Present_bytes_w11))
-					{
-						// TODO: Remove this debug instruction
-						//MESSAGE_BOX_DBG("DETECTED COverlayContextPresent address", MB_OK)
+					// TODO: Remove this debug instruction
+					//MESSAGE_BOX_DBG("DETECTED COverlayContextPresent address", MB_OK)
 
-						COverlayContext_Present_orig = (COverlayContext_Present_t*)address;
-						COverlayContext_Present_real_orig = COverlayContext_Present_orig;
-					}
-					else if (!COverlayContext_IsCandidateDirectFlipCompatbile_orig && sizeof
-						COverlayContext_IsCandidateDirectFlipCompatbile_bytes_w11 <= moduleInfo.SizeOfImage - i && !
-						aob_match_inverse(
-							address, COverlayContext_IsCandidateDirectFlipCompatbile_bytes_w11,
-							sizeof COverlayContext_IsCandidateDirectFlipCompatbile_bytes_w11))
+					COverlayContext_Present_orig = (COverlayContext_Present_t*)address;
+					COverlayContext_Present_real_orig = COverlayContext_Present_orig;
+				}
+				else if (!COverlayContext_IsCandidateDirectFlipCompatbile_orig && sizeof
+					COverlayContext_IsCandidateDirectFlipCompatbile_bytes_w11 <= moduleInfo.SizeOfImage - i && !
+					aob_match_inverse(
+						address, COverlayContext_IsCandidateDirectFlipCompatbile_bytes_w11,
+						sizeof COverlayContext_IsCandidateDirectFlipCompatbile_bytes_w11))
+				{
+					COverlayContext_IsCandidateDirectFlipCompatbile_orig = (
+						COverlayContext_IsCandidateDirectFlipCompatbile_t*)address;
+				}
+				else if (!COverlayContext_OverlaysEnabled_orig && sizeof COverlayContext_OverlaysEnabled_bytes_w11
+					<= moduleInfo.SizeOfImage - i && !aob_match_inverse(
+						address, COverlayContext_OverlaysEnabled_bytes_w11,
+						sizeof COverlayContext_OverlaysEnabled_bytes_w11))
+				{
+					COverlayContext_OverlaysEnabled_orig = (COverlayContext_OverlaysEnabled_t*)address;
+				}
+				if (COverlayContext_Present_orig && COverlayContext_IsCandidateDirectFlipCompatbile_orig &&
+					COverlayContext_OverlaysEnabled_orig)
+				{
+					//MESSAGE_BOX_DBG("All addresses successfully retrieved", MB_OK)
+
+					break;
+				}
+			}
+
+			DWORD rev;
+			DWORD revSize = sizeof(rev);
+			RegGetValueA(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", "UBR", RRF_RT_DWORD,
+				NULL, &rev, &revSize);
+
+			if (rev >= 706)
+			{
+				//MESSAGE_BOX_DBG("Detected recent Windows OS", MB_OK)
+
+				// COverlayContext_DeviceClipBox_offset_w11 += 8;
+			}
+		}
+		else
+		{
+			for (size_t i = 0; i <= moduleInfo.SizeOfImage - sizeof(COverlayContext_Present_bytes); i++)
+			{
+				unsigned char* address = (unsigned char*)dwmcore + i;
+				if (!COverlayContext_Present_orig && !memcmp(address, COverlayContext_Present_bytes,
+					sizeof(COverlayContext_Present_bytes)))
+				{
+					COverlayContext_Present_orig = (COverlayContext_Present_t*)address;
+					COverlayContext_Present_real_orig = COverlayContext_Present_orig;
+				}
+				else if (!COverlayContext_IsCandidateDirectFlipCompatbile_orig && !memcmp(
+					address, COverlayContext_IsCandidateDirectFlipCompatbile_bytes,
+					sizeof(COverlayContext_IsCandidateDirectFlipCompatbile_bytes)))
+				{
+					static int found = 0;
+					found++;
+					if (found == 2)
 					{
 						COverlayContext_IsCandidateDirectFlipCompatbile_orig = (
-							COverlayContext_IsCandidateDirectFlipCompatbile_t*)address;
-					}
-					else if (!COverlayContext_OverlaysEnabled_orig && sizeof COverlayContext_OverlaysEnabled_bytes_w11
-						<= moduleInfo.SizeOfImage - i && !aob_match_inverse(
-							address, COverlayContext_OverlaysEnabled_bytes_w11,
-							sizeof COverlayContext_OverlaysEnabled_bytes_w11))
-					{
-						COverlayContext_OverlaysEnabled_orig = (COverlayContext_OverlaysEnabled_t*)address;
-					}
-					if (COverlayContext_Present_orig && COverlayContext_IsCandidateDirectFlipCompatbile_orig &&
-						COverlayContext_OverlaysEnabled_orig)
-					{
-						//MESSAGE_BOX_DBG("All addresses successfully retrieved", MB_OK)
-
-						break;
+							COverlayContext_IsCandidateDirectFlipCompatbile_t*)(address - 0xa);
 					}
 				}
-
-				DWORD rev;
-				DWORD revSize = sizeof(rev);
-				RegGetValueA(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion", "UBR", RRF_RT_DWORD,
-				             NULL, &rev, &revSize);
-
-				if (rev >= 706)
+				else if (!COverlayContext_OverlaysEnabled_orig && !memcmp(
+					address, COverlayContext_OverlaysEnabled_bytes, sizeof(COverlayContext_OverlaysEnabled_bytes)))
 				{
-					//MESSAGE_BOX_DBG("Detected recent Windows OS", MB_OK)
-
-					// COverlayContext_DeviceClipBox_offset_w11 += 8;
+					COverlayContext_OverlaysEnabled_orig = (COverlayContext_OverlaysEnabled_t*)(address - 0x7);
+				}
+				if (COverlayContext_Present_orig && COverlayContext_IsCandidateDirectFlipCompatbile_orig &&
+					COverlayContext_OverlaysEnabled_orig)
+				{
+					break;
 				}
 			}
-			else
-			{
-				for (size_t i = 0; i <= moduleInfo.SizeOfImage - sizeof(COverlayContext_Present_bytes); i++)
-				{
-					unsigned char* address = (unsigned char*)dwmcore + i;
-					if (!COverlayContext_Present_orig && !memcmp(address, COverlayContext_Present_bytes,
-					                                             sizeof(COverlayContext_Present_bytes)))
-					{
-						COverlayContext_Present_orig = (COverlayContext_Present_t*)address;
-						COverlayContext_Present_real_orig = COverlayContext_Present_orig;
-					}
-					else if (!COverlayContext_IsCandidateDirectFlipCompatbile_orig && !memcmp(
-						address, COverlayContext_IsCandidateDirectFlipCompatbile_bytes,
-						sizeof(COverlayContext_IsCandidateDirectFlipCompatbile_bytes)))
-					{
-						static int found = 0;
-						found++;
-						if (found == 2)
-						{
-							COverlayContext_IsCandidateDirectFlipCompatbile_orig = (
-								COverlayContext_IsCandidateDirectFlipCompatbile_t*)(address - 0xa);
-						}
-					}
-					else if (!COverlayContext_OverlaysEnabled_orig && !memcmp(
-						address, COverlayContext_OverlaysEnabled_bytes, sizeof(COverlayContext_OverlaysEnabled_bytes)))
-					{
-						COverlayContext_OverlaysEnabled_orig = (COverlayContext_OverlaysEnabled_t*)(address - 0x7);
-					}
-					if (COverlayContext_Present_orig && COverlayContext_IsCandidateDirectFlipCompatbile_orig &&
-						COverlayContext_OverlaysEnabled_orig)
-					{
-						break;
-					}
-				}
-			}
+		}
 
-			char lutFolderPath[MAX_PATH];
-			char variable_message_states[300];
-			sprintf(variable_message_states, "Current variable states: COverlayContext::Present - %p\t"
-			        "COverlayContext::IsCandidateDirectFlipCompatible - %p\tCOverlayContext::OverlaysEnabled - %p",
-			        COverlayContext_Present_orig,
-			        COverlayContext_IsCandidateDirectFlipCompatbile_orig, COverlayContext_OverlaysEnabled_orig);
+		char lutFolderPath[MAX_PATH];
+		char variable_message_states[300];
+		sprintf(variable_message_states, "Current variable states: COverlayContext::Present - %p\t"
+			"COverlayContext::IsCandidateDirectFlipCompatible - %p\tCOverlayContext::OverlaysEnabled - %p",
+			COverlayContext_Present_orig,
+			COverlayContext_IsCandidateDirectFlipCompatbile_orig, COverlayContext_OverlaysEnabled_orig);
 
-			//MESSAGE_BOX_DBG(variable_message_states, MB_OK)
+		//MESSAGE_BOX_DBG(variable_message_states, MB_OK)
 
-			if (COverlayContext_Present_orig && COverlayContext_IsCandidateDirectFlipCompatbile_orig &&
-				COverlayContext_OverlaysEnabled_orig)
+		if (COverlayContext_Present_orig && COverlayContext_IsCandidateDirectFlipCompatbile_orig &&
+			COverlayContext_OverlaysEnabled_orig)
 
-			{
-				MH_Initialize();
-				MH_CreateHook((PVOID)COverlayContext_Present_orig, (PVOID)COverlayContext_Present_hook,
-				              (PVOID*)&COverlayContext_Present_orig);
-				MH_CreateHook((PVOID)COverlayContext_IsCandidateDirectFlipCompatbile_orig,
-				              (PVOID)COverlayContext_IsCandidateDirectFlipCompatbile_hook,
-				              (PVOID*)&COverlayContext_IsCandidateDirectFlipCompatbile_orig);
-				MH_CreateHook((PVOID)COverlayContext_OverlaysEnabled_orig, (PVOID)COverlayContext_OverlaysEnabled_hook,
-				              (PVOID*)&COverlayContext_OverlaysEnabled_orig);
-				MH_EnableHook(MH_ALL_HOOKS);
-				LOG_ONLY_ONCE("DWM HOOK DLL INITIALIZATION. START LOGGING")
+		{
+			MH_Initialize();
+			MH_CreateHook((PVOID)COverlayContext_Present_orig, (PVOID)COverlayContext_Present_hook,
+				(PVOID*)&COverlayContext_Present_orig);
+			MH_CreateHook((PVOID)COverlayContext_IsCandidateDirectFlipCompatbile_orig,
+				(PVOID)COverlayContext_IsCandidateDirectFlipCompatbile_hook,
+				(PVOID*)&COverlayContext_IsCandidateDirectFlipCompatbile_orig);
+			MH_CreateHook((PVOID)COverlayContext_OverlaysEnabled_orig, (PVOID)COverlayContext_OverlaysEnabled_hook,
+				(PVOID*)&COverlayContext_OverlaysEnabled_orig);
+			MH_EnableHook(MH_ALL_HOOKS);
+			LOG_ONLY_ONCE("DWM HOOK DLL INITIALIZATION. START LOGGING")
 				//MESSAGE_BOX_DBG("DWM HOOK INITIALIZATION", MB_OK)
 
 				break;
-			}
-			return FALSE;
 		}
+		return FALSE;
+	}
 	case DLL_PROCESS_DETACH:
 		MH_Uninitialize();
 		Sleep(100);

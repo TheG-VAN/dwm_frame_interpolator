@@ -11,6 +11,7 @@ using System.Windows.Controls;
 using System.Windows.Forms;
 using System.Windows.Input;
 using Microsoft.Win32;
+using Xceed.Wpf.Toolkit;
 using ContextMenu = System.Windows.Forms.ContextMenu;
 using MenuItem = System.Windows.Forms.MenuItem;
 using MessageBox = System.Windows.Forms.MessageBox;
@@ -26,6 +27,9 @@ namespace DwmLutGUI
         private readonly MenuItem _applyItem;
         private readonly MenuItem _disableItem;
         private readonly MenuItem _disableAndExitItem;
+
+        string registryKeyPath = @"Software\DwmFrameInterpolator";
+        string keyName = "FpsMultiplier";
 
         public MainWindow()
         {
@@ -48,6 +52,21 @@ namespace DwmLutGUI
             _viewModel = (MainViewModel)DataContext;
             _applyOnCooldown = false;
 
+            
+            using (RegistryKey key = Registry.LocalMachine.CreateSubKey(registryKeyPath))
+            {
+                if (key != null)
+                {
+                    // Check if the value exists
+                    object existingValue = key.GetValue(keyName);
+                    if (existingValue == null)
+                    {
+                        key.SetValue(keyName, 2);
+                    }
+                    FpsMultiplierEntry.Value = (int) key.GetValue(keyName);
+                }
+            }
+
             Apply_Click(null, null);
 
             var args = Environment.GetCommandLineArgs().ToList();
@@ -64,7 +83,7 @@ namespace DwmLutGUI
 
             if (args.Contains("-minimize"))
             {
-                WindowState = WindowState.Minimized;
+                WindowState = System.Windows.WindowState.Minimized;
                 Hide();
             }
             else if (args.Contains("-exit"))
@@ -81,7 +100,7 @@ namespace DwmLutGUI
                 delegate
                 {
                     Show();
-                    WindowState = WindowState.Normal;
+                    WindowState = System.Windows.WindowState.Normal;
                 };
 
             var contextMenu = new ContextMenu();
@@ -129,12 +148,26 @@ namespace DwmLutGUI
             SystemEvents.DisplaySettingsChanged += _viewModel.OnDisplaySettingsChanged;
             App.KListener.KeyDown += MonitorLutToggle;
             var keys = Enum.GetValues(typeof(Key)).Cast<Key>().ToList();
-            ToggleKeyCombo.ItemsSource = keys;
+        }
+
+        private void IntegerUpDown_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            // Update the file whenever the value changes
+            if (FpsMultiplierEntry.Value.HasValue)
+            {
+                using (RegistryKey key = Registry.LocalMachine.CreateSubKey(registryKeyPath))
+                {
+                    if (key != null)
+                    {
+                        key.SetValue(keyName, FpsMultiplierEntry.Value.Value);
+                    }
+                }
+            }
         }
 
         protected override void OnStateChanged(EventArgs e)
         {
-            if (WindowState == WindowState.Minimized)
+            if (WindowState == System.Windows.WindowState.Minimized)
             {
                 Hide();
             }
@@ -284,7 +317,6 @@ namespace DwmLutGUI
 
         private void MonitorLutToggle(object sender, RawKeyEventArgs e)
         {
-            if (e.Key != (Key)ToggleKeyCombo.SelectedItem) return;
             var monitor = _viewModel.SelectedMonitor;
             if (monitor == null) return;
             if (monitor.SdrLutFilename != "None")

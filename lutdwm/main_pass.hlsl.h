@@ -120,8 +120,7 @@ float4 PS(VS_OUTPUT input) : SV_TARGET {
 	float2 m = motionTex.Sample(smp, input.tex).xy;
     float mse = motionTex.Sample(smp, input.tex).z;
     float2 texelsize = input.tex / input.pos.xy;
-    bool pulling_from_hud = false;
-    float mmult = 0.5;
+    float mmult = motionTex.Sample(smp, input.tex).w;
     float2 motion_in_middle = motionTex.Sample(smp, input.tex + m * mmult).xy;
     float motion_diff = saturate(0.05 * (-1 + (abs(m.x) + abs(m.y)) / (abs(motion_in_middle.x) + abs(motion_in_middle.y))));
     if (debug) {
