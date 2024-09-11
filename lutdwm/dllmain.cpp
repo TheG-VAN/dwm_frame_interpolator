@@ -245,9 +245,9 @@ ID3D11RenderTargetView* motion9RenderTarget;
 ID3D11ShaderResourceView** views[] = { &motion0TextureView, &motion1TextureView, &motion2TextureView, &motion3TextureView, &motion4TextureView, &motion5TextureView, &motion6TextureView, &motion7TextureView, &motion8TextureView, &motion9TextureView };
 ID3D11RenderTargetView** targets[] = { &motion0RenderTarget, &motion1RenderTarget, &motion2RenderTarget, &motion3RenderTarget, &motion4RenderTarget, &motion5RenderTarget, &motion6RenderTarget, &motion7RenderTarget, &motion8RenderTarget, &motion9RenderTarget };
 
-ID3D11PixelShader* changePass;
+ID3D11ComputeShader* changePass;
 ID3D11ShaderResourceView* changeTextureView;
-ID3D11RenderTargetView* changeRenderTarget;
+ID3D11UnorderedAccessView* changeUAV;
 
 ID3D11PixelShader* copyMotionPass;
 ID3D11ShaderResourceView* motionCopyTextureView;
@@ -301,7 +301,7 @@ void SetConstantBuffer(int constantData[], int length) {
 	D3D11_MAPPED_SUBRESOURCE resource;
 	EXECUTE_WITH_LOG(deviceContext->Map((ID3D11Resource*)constantBuffer, 0, D3D11_MAP_WRITE_DISCARD, 0,
 		&resource))
-		memcpy(resource.pData, constantData, sizeof(int) * length);
+	memcpy(resource.pData, constantData, sizeof(int) * length);
 	deviceContext->Unmap((ID3D11Resource*)constantBuffer, 0);
 	deviceContext->PSSetConstantBuffers(0, 1, &constantBuffer);
 }
@@ -327,18 +327,26 @@ void DrawRectangle(struct tagRECT* rect, int index)
 
 	deviceContext->Draw(numVerts, 0);
 	deviceContext->GenerateMips(currTextureView);
+	ID3D11RenderTargetView* NullRen = nullptr;
+	deviceContext->OMSetRenderTargets(1, &NullRen, NULL);
 
 	// change pass
 	if (fps_multiplier > 2) {
-		SetVertexBuffer(rect, textureDesc[index].Width >> 4, textureDesc[index].Height >> 4);
-		deviceContext->PSSetShader(changePass, NULL, 0);
-		deviceContext->OMSetRenderTargets(1, &changeRenderTarget, NULL);
-		deviceContext->PSSetShaderResources(0, 1, &currTextureView);
-		deviceContext->PSSetShaderResources(1, 1, &prevTextureView);
-		deviceContext->PSSetSamplers(0, 1, &lodSamplerState);
+		deviceContext->CSSetShader(changePass, NULL, 0);
+		deviceContext->CSSetUnorderedAccessViews(0, 1, &changeUAV, NULL);
+		deviceContext->CSSetShaderResources(0, 1, &currTextureView);
+		deviceContext->CSSetShaderResources(1, 1, &prevTextureView);
+		float clearColor[4] = { 0.0f, 0.0f, 0.0f, 1.0f };
+		deviceContext->ClearUnorderedAccessViewFloat(changeUAV, clearColor);
+		UINT width = backBufferDesc.Width / 2;
+		UINT height = backBufferDesc.Height / 2;
+		const UINT threadGroupSize = 16;
+		UINT numGroupsX = (width + threadGroupSize - 1) / threadGroupSize;
+		UINT numGroupsY = (height + threadGroupSize - 1) / threadGroupSize;
+		deviceContext->Dispatch(numGroupsX, numGroupsY, 1);
 
-		deviceContext->Draw(numVerts, 0);
-		deviceContext->GenerateMips(changeTextureView);
+		ID3D11UnorderedAccessView* NullUav = nullptr;
+		deviceContext->CSSetUnorderedAccessViews(0, 1, &NullUav, nullptr);
 	}
 
 	// motion passes
@@ -507,16 +515,16 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 			psBlob->Release();
 		}
 		{
-			ID3DBlob* psBlob;
+			ID3DBlob* csBlob;
 			ID3DBlob* compile_error_interface;
 			EXECUTE_D3DCOMPILE_WITH_LOG(
-				D3DCompile(change_pass, sizeof change_pass, NULL, NULL, NULL, "PS", "ps_5_0", 0, 0, &psBlob, &
+				D3DCompile(change_pass, sizeof change_pass, NULL, NULL, NULL, "CS", "cs_5_0", 0, 0, &csBlob, &
 					compile_error_interface), compile_error_interface)
 
-				LOG_ONLY_ONCE("Pixel shader compiled successfully")
-				device->CreatePixelShader(psBlob->GetBufferPointer(),
-					psBlob->GetBufferSize(), NULL, &changePass);
-			psBlob->Release();
+				LOG_ONLY_ONCE("Compute shader compiled successfully")
+				device->CreateComputeShader(csBlob->GetBufferPointer(),
+					csBlob->GetBufferSize(), NULL, &changePass);
+			csBlob->Release();
 		}
 		{
 			ID3DBlob* psBlob;
@@ -610,21 +618,21 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 		}
 		{
 			D3D11_TEXTURE2D_DESC desc = {};
-			desc.Width = backBufferDesc.Width >> 4;
-			desc.Height = backBufferDesc.Height >> 4;
+			desc.Width = 1;
+			desc.Height = 1;
 			desc.MipLevels = 0;
 			desc.ArraySize = 1;
 			desc.Format = DXGI_FORMAT_R8_UNORM;
 			desc.SampleDesc.Count = 1;
 			desc.Usage = D3D11_USAGE_DEFAULT;
-			desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+			desc.BindFlags = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE;
 			desc.CPUAccessFlags = 0;
-			desc.MiscFlags = D3D11_RESOURCE_MISC_GENERATE_MIPS;
+			desc.MiscFlags = 0;
 
 			ID3D11Texture2D* tex;
 			EXECUTE_WITH_LOG(device->CreateTexture2D(&desc, NULL, &tex))
 				EXECUTE_WITH_LOG(device->CreateShaderResourceView((ID3D11Resource*)tex, NULL, &changeTextureView))
-				EXECUTE_WITH_LOG(device->CreateRenderTargetView((ID3D11Resource*)tex, NULL, &changeRenderTarget))
+				EXECUTE_WITH_LOG(device->CreateUnorderedAccessView((ID3D11Resource*)tex, NULL, &changeUAV))
 				tex->Release();
 		}
 		{

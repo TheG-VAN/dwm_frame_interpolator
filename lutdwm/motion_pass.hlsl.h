@@ -174,7 +174,7 @@ float3 atrous_upscale(VS_OUTPUT i) {
 
 float4 PS(VS_OUTPUT input) : SV_TARGET {
 	if (mult > 2) {
-		if (changeTex.SampleLevel(lodSmp, float2(0.25, 0.5), 5).x + changeTex.SampleLevel(lodSmp, float2(0.75, 0.5), 5).x == 0) {
+		if (changeTex.Sample(lodSmp, float2(0, 0)).x == 0) {
 			float4 mc = motionCopyTex.Sample(lodSmp, input.tex);
 			if (mc.w - 1.0 / mult <= 0) {
 				return 0;
