@@ -148,6 +148,7 @@ namespace DwmLutGUI
             SystemEvents.DisplaySettingsChanged += _viewModel.OnDisplaySettingsChanged;
             App.KListener.KeyDown += MonitorLutToggle;
             var keys = Enum.GetValues(typeof(Key)).Cast<Key>().ToList();
+            ToggleKeyCombo.ItemsSource = keys;
         }
 
         private void IntegerUpDown_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
@@ -317,21 +318,13 @@ namespace DwmLutGUI
 
         private void MonitorLutToggle(object sender, RawKeyEventArgs e)
         {
-            var monitor = _viewModel.SelectedMonitor;
-            if (monitor == null) return;
-            if (monitor.SdrLutFilename != "None")
-            {
-                _viewModel.SdrLutPath =
-                    monitor.SdrLuts[(monitor.SdrLuts.IndexOf(monitor.SdrLutPath) + 1) % monitor.SdrLuts.Count];
-            }
-            else
-            {
-                _viewModel.HdrLutPath = monitor.HdrLuts[(monitor.HdrLuts.IndexOf(monitor.HdrLutPath) + 1) % monitor.HdrLuts.Count];
-            }
+            if (e.Key != (Key)ToggleKeyCombo.SelectedItem) return;
 
             if (_viewModel.IsActive)
             {
                 Disable_Click(null, null);
+            } else
+            {
                 Apply_Click(null, null);
             }
         }

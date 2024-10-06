@@ -6,7 +6,7 @@
 		xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
         xmlns:local="clr-namespace:DwmLutGUI"
         mc:Ignorable="d"
-        Title="DWM Frame Interpolator" Height="130" Width="400" MinHeight="130" MinWidth="400" Closing="OnProcessExit">
+        Title="DWM Frame Interpolator" Height="170" Width="400" MinHeight="170" MinWidth="400" Closing="OnProcessExit">
     <Window.DataContext>
         <local:MainViewModel />
     </Window.DataContext>
@@ -18,6 +18,7 @@
             <Grid>
 				<Grid.RowDefinitions>
 					<RowDefinition Height="Auto" />
+					<RowDefinition Height="Auto" />
 					<RowDefinition Height="*" />
 				</Grid.RowDefinitions>
 
@@ -26,8 +27,13 @@
 				    <xctk:IntegerUpDown x:Name="FpsMultiplierEntry" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="5" Minimum="2" Maximum="10" ValueChanged="IntegerUpDown_ValueChanged"/>
 				</StackPanel>
 
+				<StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Grid.Row="1">
+					<Label Content="Hotkey:" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="5" />
+					<ComboBox x:Name="ToggleKeyCombo" Text="Toggle Key" Height="25" SelectedItem="{Binding ToggleKey}" />
+				</StackPanel>
 
-				<Grid Grid.Row="1">
+
+				<Grid Grid.Row="2">
 				    <Grid.ColumnDefinitions>
 					    <ColumnDefinition Width="*" />
 					    <ColumnDefinition Width="*" />
