@@ -256,6 +256,7 @@ ID3D11RenderTargetView* motionCopyRenderTarget;
 ID3D11Buffer* constantBuffer;
 
 int fps_multiplier = 2;
+int resolution_multiplier = 1;
 
 int ctr = 0;
 
@@ -316,7 +317,7 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	deviceContext->OMGetRenderTargets(1, &renderTargetView, NULL);
 
 	// curr pass
-	SetVertexBuffer(rect, textureDesc[index].Width >> 1, textureDesc[index].Height >> 1);
+	SetVertexBuffer(rect, min(resolution_multiplier, 2) * textureDesc[index].Width >> 1, min(resolution_multiplier, 2) * textureDesc[index].Height >> 1);
 	deviceContext->PSSetShader(currPass, NULL, 0);
 	deviceContext->PSSetShaderResources(0, 1, &textureView[index]);
 	deviceContext->PSSetSamplers(0, 1, &lodSamplerState);
@@ -362,7 +363,7 @@ void DrawRectangle(struct tagRECT* rect, int index)
 		deviceContext->PSSetShaderResources(3, 1, &changeTextureView);
 		deviceContext->PSSetShaderResources(4, 1, &motionCopyTextureView);
 
-		SetVertexBuffer(rect, backBufferDesc.Width >> (3 + mip_level), backBufferDesc.Height >> (3 + mip_level));
+		SetVertexBuffer(rect, resolution_multiplier * backBufferDesc.Width >> (3 + mip_level), resolution_multiplier * backBufferDesc.Height >> (3 + mip_level));
 
 		int constantData[3] = { mip_level, frame_count, fps_multiplier };
 		SetConstantBuffer(constantData, 3);
@@ -377,7 +378,7 @@ void DrawRectangle(struct tagRECT* rect, int index)
 		deviceContext->PSSetShaderResources(0, 1, views[0]);
 		deviceContext->PSSetSamplers(0, 1, &lodSamplerState);
 
-		SetVertexBuffer(rect, backBufferDesc.Width >> 3, backBufferDesc.Height >> 3);
+		SetVertexBuffer(rect, resolution_multiplier * backBufferDesc.Width >> 3, resolution_multiplier * backBufferDesc.Height >> 3);
 		deviceContext->Draw(numVerts, 0);
 	}
 
@@ -402,7 +403,7 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	deviceContext->Draw(numVerts, 0);
 
 	// prev pass (just curr pass but reading from curr texture instead of backbuffer)
-	SetVertexBuffer(rect, textureDesc[index].Width >> 1, textureDesc[index].Height >> 1);
+	SetVertexBuffer(rect, min(resolution_multiplier, 2) * textureDesc[index].Width >> 1, min(resolution_multiplier, 2) * textureDesc[index].Height >> 1);
 	deviceContext->PSSetShader(currPass, NULL, 0);
 	deviceContext->PSSetShaderResources(0, 1, &currTextureView);
 	deviceContext->PSSetSamplers(0, 1, &lodSamplerState);
@@ -550,8 +551,8 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 		}
 		{
 			D3D11_TEXTURE2D_DESC desc = {};
-			desc.Width = backBufferDesc.Width >> 1;
-			desc.Height = backBufferDesc.Height >> 1;
+			desc.Width = min(resolution_multiplier, 2) * backBufferDesc.Width >> 1;
+			desc.Height = min(resolution_multiplier, 2) * backBufferDesc.Height >> 1;
 			desc.MipLevels = 0;
 			desc.ArraySize = 1;
 			desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -569,8 +570,8 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 		}
 		{
 			D3D11_TEXTURE2D_DESC desc = {};
-			desc.Width = backBufferDesc.Width >> 1;
-			desc.Height = backBufferDesc.Height >> 1;
+			desc.Width = min(resolution_multiplier, 2) * backBufferDesc.Width >> 1;
+			desc.Height = min(resolution_multiplier, 2) * backBufferDesc.Height >> 1;
 			desc.MipLevels = 0;
 			desc.ArraySize = 1;
 			desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -589,8 +590,8 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 		{
 			for (int i = 0; i <= 6; i++) {
 				D3D11_TEXTURE2D_DESC desc = {};
-				desc.Width = backBufferDesc.Width >> (3 + i);
-				desc.Height = backBufferDesc.Height >> (3 + i);
+				desc.Width = resolution_multiplier * backBufferDesc.Width >> (3 + i);
+				desc.Height = resolution_multiplier * backBufferDesc.Height >> (3 + i);
 				desc.MipLevels = 0;
 				desc.ArraySize = 1;
 				desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
@@ -637,8 +638,8 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 		}
 		{
 			D3D11_TEXTURE2D_DESC desc = {};
-			desc.Width = backBufferDesc.Width >> 3;
-			desc.Height = backBufferDesc.Height >> 3;
+			desc.Width = resolution_multiplier * backBufferDesc.Width >> 3;
+			desc.Height = resolution_multiplier * backBufferDesc.Height >> 3;
 			desc.MipLevels = 0;
 			desc.ArraySize = 1;
 			desc.Format = DXGI_FORMAT_R16G16B16A16_FLOAT;
@@ -704,15 +705,26 @@ bool ApplyLUT(void* cOverlayContext, IDXGISwapChain* swapChain, struct tagRECT* 
 	{
 		HKEY hKey;
 		LPCSTR subKey = "Software\\DwmFrameInterpolator";
-		LPCSTR valueName = "FpsMultiplier";
-		DWORD value = 0;
-		DWORD valueSize = sizeof(value);
+		LPCSTR fpsValueName = "FpsMultiplier";
+		DWORD fpsValue = 0;
+		DWORD fpsValueSize = sizeof(fpsValue);
+		LPCSTR resValueName = "ResolutionMultiplier";
+		DWORD resValue = 0;
+		DWORD resValueSize = sizeof(resValue);
 		if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, subKey, 0, KEY_QUERY_VALUE, &hKey) == ERROR_SUCCESS)
 		{
 			// Retrieve the value using RegGetValueA
-			if (RegGetValueA(hKey, nullptr, valueName, RRF_RT_REG_DWORD, NULL, &value, &valueSize) == ERROR_SUCCESS)
+			if (RegGetValueA(hKey, nullptr, fpsValueName, RRF_RT_REG_DWORD, NULL, &fpsValue, &fpsValueSize) == ERROR_SUCCESS)
 			{
-				fps_multiplier = value;
+				fps_multiplier = fpsValue;
+			}
+			if (RegGetValueA(hKey, nullptr, resValueName, RRF_RT_REG_DWORD, NULL, &resValue, &resValueSize) == ERROR_SUCCESS)
+			{
+				// Only update resolution multiplier on new apply
+				if (!device)
+				{
+					resolution_multiplier = resValue;
+				}
 			}
 			RegCloseKey(hKey);
 		}

@@ -29,7 +29,8 @@ namespace DwmLutGUI
         private readonly MenuItem _disableAndExitItem;
 
         string registryKeyPath = @"Software\DwmFrameInterpolator";
-        string keyName = "FpsMultiplier";
+        string fpsMultKeyName = "FpsMultiplier";
+        string resolutionMultKeyName = "ResolutionMultiplier";
 
         public MainWindow()
         {
@@ -58,12 +59,20 @@ namespace DwmLutGUI
                 if (key != null)
                 {
                     // Check if the value exists
-                    object existingValue = key.GetValue(keyName);
-                    if (existingValue == null)
+                    object existingFpsValue = key.GetValue(fpsMultKeyName);
+                    if (existingFpsValue == null)
                     {
-                        key.SetValue(keyName, 2);
+                        key.SetValue(fpsMultKeyName, 2);
                     }
-                    FpsMultiplierEntry.Value = (int) key.GetValue(keyName);
+                    FpsMultiplierEntry.Value = (int) key.GetValue(fpsMultKeyName);
+
+                    // Check if the value exists
+                    object existingResValue = key.GetValue(resolutionMultKeyName);
+                    if (existingResValue == null)
+                    {
+                        key.SetValue(resolutionMultKeyName, 2);
+                    }
+                    ResolutionMultiplierEntry.Value = (int)key.GetValue(resolutionMultKeyName);
                 }
             }
 
@@ -151,7 +160,7 @@ namespace DwmLutGUI
             ToggleKeyCombo.ItemsSource = keys;
         }
 
-        private void IntegerUpDown_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        private void FpsMultiplier_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
         {
             // Update the file whenever the value changes
             if (FpsMultiplierEntry.Value.HasValue)
@@ -160,7 +169,22 @@ namespace DwmLutGUI
                 {
                     if (key != null)
                     {
-                        key.SetValue(keyName, FpsMultiplierEntry.Value.Value);
+                        key.SetValue(fpsMultKeyName, FpsMultiplierEntry.Value.Value);
+                    }
+                }
+            }
+        }
+
+        private void ResolutionMultiplier_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            // Update the file whenever the value changes
+            if (ResolutionMultiplierEntry.Value.HasValue)
+            {
+                using (RegistryKey key = Registry.LocalMachine.CreateSubKey(registryKeyPath))
+                {
+                    if (key != null)
+                    {
+                        key.SetValue(resolutionMultKeyName, ResolutionMultiplierEntry.Value.Value);
                     }
                 }
             }

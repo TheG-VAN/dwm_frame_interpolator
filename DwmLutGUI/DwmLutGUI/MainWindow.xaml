@@ -6,7 +6,7 @@
 		xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
         xmlns:local="clr-namespace:DwmLutGUI"
         mc:Ignorable="d"
-        Title="DWM Frame Interpolator" Height="170" Width="400" MinHeight="170" MinWidth="400" Closing="OnProcessExit">
+        Title="DWM Frame Interpolator" Height="210" Width="400" MinHeight="210" MinWidth="400" Closing="OnProcessExit">
     <Window.DataContext>
         <local:MainViewModel />
     </Window.DataContext>
@@ -19,21 +19,27 @@
 				<Grid.RowDefinitions>
 					<RowDefinition Height="Auto" />
 					<RowDefinition Height="Auto" />
+					<RowDefinition Height="Auto" />
 					<RowDefinition Height="*" />
 				</Grid.RowDefinitions>
 
 				<StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Grid.Row="0">
 				    <Label Content="FPS Multiplier (e.g. 2 to turn 60fps into 120fps):" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="5" />
-				    <xctk:IntegerUpDown x:Name="FpsMultiplierEntry" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="5" Minimum="2" Maximum="10" ValueChanged="IntegerUpDown_ValueChanged"/>
+				    <xctk:IntegerUpDown x:Name="FpsMultiplierEntry" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="5" Minimum="2" Maximum="20" ValueChanged="FpsMultiplier_ValueChanged"/>
 				</StackPanel>
 
 				<StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Grid.Row="1">
+					<Label Content="Resolution Multiplier (performance impact, 1 is default):" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="5" />
+					<xctk:IntegerUpDown x:Name="ResolutionMultiplierEntry" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="5" Minimum="1" Maximum="8" ValueChanged="ResolutionMultiplier_ValueChanged"/>
+				</StackPanel>
+
+				<StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Grid.Row="2">
 					<Label Content="Hotkey:" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="5" />
 					<ComboBox x:Name="ToggleKeyCombo" Text="Toggle Key" Height="25" SelectedItem="{Binding ToggleKey}" />
 				</StackPanel>
 
 
-				<Grid Grid.Row="2">
+				<Grid Grid.Row="3">
 				    <Grid.ColumnDefinitions>
 					    <ColumnDefinition Width="*" />
 					    <ColumnDefinition Width="*" />
