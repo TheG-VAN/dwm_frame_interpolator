@@ -2,6 +2,10 @@
 #include <D3dkmthk.h>
 #include <chrono>
 #include "dwmapi.h"
+#include <fstream>
+#include <sstream>
+#include <string>
+
 using namespace std::chrono;
 
 #pragma comment(lib,"dwmapi.lib")
@@ -61,13 +65,23 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 	// Window ignores mouseclicks thanks to this advice:
 	// https://stackoverflow.com/questions/31313624/click-through-transparent-window-no-dragging-allowed-c
 
+
+	int x = 0, y = 0;
+	if (lpCmdLine != NULL && lpCmdLine[0] != 0) {
+		std::stringstream ss(lpCmdLine);
+		char comma;
+		ss >> x;
+		ss >> comma;
+		ss >> y;
+	}
+
 	// Creating the Window
 	hwnd = CreateWindowEx(
 		WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST,
 		g_szClassName,
 		L"DummyApp",
 		WS_POPUP,
-		0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN),
+		x, y, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN),
 		NULL, NULL, hInstance, NULL);
 
 	if (hwnd == NULL)

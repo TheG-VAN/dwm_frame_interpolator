@@ -298,6 +298,7 @@ namespace DwmLutGUI
                 }
                 Process dummyApp = new Process();
                 dummyApp.StartInfo.FileName = "DummyApp.exe";
+                dummyApp.StartInfo.Arguments = _viewModel.SelectedMonitor.Position;
                 dummyApp.Start();
                 dummyApp.PriorityClass = ProcessPriorityClass.RealTime;
                 _viewModel.ReInject();

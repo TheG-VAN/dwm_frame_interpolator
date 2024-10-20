@@ -6,7 +6,7 @@
 		xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
         xmlns:local="clr-namespace:DwmLutGUI"
         mc:Ignorable="d"
-        Title="DWM Frame Interpolator" Height="210" Width="400" MinHeight="210" MinWidth="400" Closing="OnProcessExit">
+        Title="DWM Frame Interpolator" Height="300" Width="400" MinHeight="300" MinWidth="400" Closing="OnProcessExit">
     <Window.DataContext>
         <local:MainViewModel />
     </Window.DataContext>
@@ -21,6 +21,7 @@
 					<RowDefinition Height="Auto" />
 					<RowDefinition Height="Auto" />
 					<RowDefinition Height="*" />
+					<RowDefinition Height="Auto" />
 				</Grid.RowDefinitions>
 
 				<StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Grid.Row="0">
@@ -38,8 +39,25 @@
 					<ComboBox x:Name="ToggleKeyCombo" Text="Toggle Key" Height="25" SelectedItem="{Binding ToggleKey}" />
 				</StackPanel>
 
+				<DataGrid SelectedItem="{Binding SelectedMonitor}" ItemsSource="{Binding Monitors}" RowHeaderWidth="0"
+                      IsReadOnly="{Binding IsActive}" AutoGenerateColumns="False" DockPanel.Dock="Bottom" Margin="0,0,0,6"
+                      CanUserReorderColumns="False" CanUserSortColumns="False" CanUserResizeColumns="False" Grid.Row="3">
+					<DataGrid.Columns>
+						<DataGridTextColumn Header="#" Binding="{Binding SourceId}" IsReadOnly="True" />
+						<DataGridTextColumn Header="Name" Binding="{Binding Name}" IsReadOnly="True" />
+						<DataGridTextColumn Header="Connector" Binding="{Binding Connector}" IsReadOnly="True" />
+						<DataGridTextColumn Header="Position" Binding="{Binding Position}" IsReadOnly="True" />
+					</DataGrid.Columns>
+					<DataGrid.Resources>
+						<SolidColorBrush x:Key="{x:Static SystemColors.InactiveSelectionHighlightBrushKey}"
+										 Color="#AABBFF"/>
+						<SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}"
+										 Color="#AABBFF"/>
+					</DataGrid.Resources>
+				</DataGrid>
 
-				<Grid Grid.Row="3">
+
+				<Grid Grid.Row="4">
 				    <Grid.ColumnDefinitions>
 					    <ColumnDefinition Width="*" />
 					    <ColumnDefinition Width="*" />

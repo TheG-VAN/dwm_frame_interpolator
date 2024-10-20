@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.Win32;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -7,6 +8,7 @@ using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
+using System.Windows.Shapes;
 using System.Xml;
 using System.Xml.Linq;
 
@@ -72,6 +74,20 @@ namespace DwmLutGUI
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(SdrLutPath));
                 OnPropertyChanged(nameof(HdrLutPath));
+                SaveConfig();
+                string registryKeyPath = @"Software\DwmFrameInterpolator";
+                string leftKeyName = "MonitorLeft";
+                string topKeyName = "MonitorTop";
+                using (RegistryKey key = Registry.LocalMachine.CreateSubKey(registryKeyPath))
+                {
+                    if (key != null)
+                    {
+                        int left = int.Parse(value.Position.Split(',')[0]);
+                        int top = int.Parse(value.Position.Split(',')[1]);
+                        key.SetValue(leftKeyName, left);
+                        key.SetValue(topKeyName, top);
+                    }
+                }
             }
             get => _selectedMonitor;
         }
@@ -85,6 +101,7 @@ namespace DwmLutGUI
         {
             var xElem = new XElement("monitors",
                 new XAttribute("lut_toggle", _toggleKey),
+                new XAttribute("selected_monitor", _selectedMonitor.Name),
                 _allMonitors.Select(x =>
                     new XElement("monitor", new XAttribute("path", x.DevicePath),
                         x.SdrLutPath != null ? new XAttribute("sdr_lut", x.SdrLutPath) : null,
@@ -158,12 +175,14 @@ namespace DwmLutGUI
             _allMonitors.Clear();
             Monitors.Clear();
             List<XElement> config = null;
+            string monitorName = null;
             if (File.Exists(_configPath))
             {
                 config = XElement.Load(_configPath).Descendants("monitor").ToList();
                 try
                 {
                     _toggleKey = (Key)Enum.Parse(typeof(Key), (string)XElement.Load(_configPath).Attribute("lut_toggle"));
+                    monitorName = (string)XElement.Load(_configPath).Attribute("selected_monitor");
                 }
                 catch
                 {
@@ -175,12 +194,41 @@ namespace DwmLutGUI
                 _toggleKey = Key.Pause;
             }
 
-            if (selectedPath == null) return;
-
-            var previous = Monitors.FirstOrDefault(monitor => monitor.DevicePath == selectedPath);
-            if (previous != null)
+            var paths = WindowsDisplayAPI.DisplayConfig.PathInfo.GetActivePaths();
+            foreach (var path in paths)
             {
-                SelectedMonitor = previous;
+                if (path.IsCloneMember) continue;
+                var targetInfo = path.TargetsInfo[0];
+                var deviceId = targetInfo.DisplayTarget.TargetId;
+                var devicePath = targetInfo.DisplayTarget.DevicePath;
+                var name = targetInfo.DisplayTarget.FriendlyName;
+                if (string.IsNullOrEmpty(name))
+                {
+                    name = "???";
+                }
+
+                var connector = targetInfo.OutputTechnology.ToString();
+                if (connector == "DisplayPortExternal")
+                {
+                    connector = "DisplayPort";
+                }
+
+                var position = path.Position.X + "," + path.Position.Y;
+
+                string sdrLutPath = null;
+                string hdrLutPath = null;
+                var monitor = new MonitorData(devicePath, path.DisplaySource.SourceId + 1, name, connector, position,
+                    sdrLutPath, hdrLutPath);
+                _allMonitors.Add(monitor);
+                Monitors.Add(monitor);
+                if (name == monitorName)
+                {
+                    SelectedMonitor = monitor;
+                }
+            }
+            if (SelectedMonitor == null)
+            {
+                SelectedMonitor = Monitors.First();
             }
         }
 

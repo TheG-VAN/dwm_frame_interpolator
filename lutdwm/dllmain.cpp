@@ -257,6 +257,8 @@ ID3D11Buffer* constantBuffer;
 
 int fps_multiplier = 2;
 int resolution_multiplier = 1;
+int monitorLeft = 0;
+int monitorTop = 0;
 
 int ctr = 0;
 
@@ -317,7 +319,7 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	deviceContext->OMGetRenderTargets(1, &renderTargetView, NULL);
 
 	// curr pass
-	SetVertexBuffer(rect, min(resolution_multiplier, 2) * textureDesc[index].Width >> 1, min(resolution_multiplier, 2) * textureDesc[index].Height >> 1);
+	SetVertexBuffer(rect, min(resolution_multiplier, 2) * backBufferDesc.Width >> 1, min(resolution_multiplier, 2) * backBufferDesc.Height >> 1);
 	deviceContext->PSSetShader(currPass, NULL, 0);
 	deviceContext->PSSetShaderResources(0, 1, &textureView[index]);
 	deviceContext->PSSetSamplers(0, 1, &lodSamplerState);
@@ -383,7 +385,7 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	}
 
 	// main pass
-	SetVertexBuffer(rect, textureDesc[index].Width, textureDesc[index].Height);
+	SetVertexBuffer(rect, backBufferDesc.Width, backBufferDesc.Height);
 
 	deviceContext->OMSetRenderTargets(1, &renderTargetView, NULL);
 	renderTargetView->Release();
@@ -403,7 +405,7 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	deviceContext->Draw(numVerts, 0);
 
 	// prev pass (just curr pass but reading from curr texture instead of backbuffer)
-	SetVertexBuffer(rect, min(resolution_multiplier, 2) * textureDesc[index].Width >> 1, min(resolution_multiplier, 2) * textureDesc[index].Height >> 1);
+	SetVertexBuffer(rect, min(resolution_multiplier, 2) * backBufferDesc.Width >> 1, min(resolution_multiplier, 2) * backBufferDesc.Height >> 1);
 	deviceContext->PSSetShader(currPass, NULL, 0);
 	deviceContext->PSSetShaderResources(0, 1, &currTextureView);
 	deviceContext->PSSetSamplers(0, 1, &lodSamplerState);
@@ -711,6 +713,12 @@ bool ApplyLUT(void* cOverlayContext, IDXGISwapChain* swapChain, struct tagRECT* 
 		LPCSTR resValueName = "ResolutionMultiplier";
 		DWORD resValue = 0;
 		DWORD resValueSize = sizeof(resValue);
+		LPCSTR leftValueName = "MonitorLeft";
+		DWORD leftValue = 0;
+		DWORD leftValueSize = sizeof(leftValue);
+		LPCSTR topValueName = "MonitorTop";
+		DWORD topValue = 0;
+		DWORD topValueSize = sizeof(topValue);
 		if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, subKey, 0, KEY_QUERY_VALUE, &hKey) == ERROR_SUCCESS)
 		{
 			// Retrieve the value using RegGetValueA
@@ -726,7 +734,35 @@ bool ApplyLUT(void* cOverlayContext, IDXGISwapChain* swapChain, struct tagRECT* 
 					resolution_multiplier = resValue;
 				}
 			}
+			// Only change monitor on re-apply
+			if (!device)
+			{
+				if (RegGetValueA(hKey, nullptr, leftValueName, RRF_RT_REG_DWORD, NULL, &leftValue, &leftValueSize) == ERROR_SUCCESS) {
+					monitorLeft = leftValue;
+				}
+				if (RegGetValueA(hKey, nullptr, topValueName, RRF_RT_REG_DWORD, NULL, &topValue, &topValueSize) == ERROR_SUCCESS) {
+					monitorTop = topValue;
+				}
+			}
 			RegCloseKey(hKey);
+		}
+
+		int left, top;
+		if (isWindows11)
+		{
+			float* rect = (float*)((unsigned char*)*(void**)cOverlayContext + COverlayContext_DeviceClipBox_offset_w11);
+			left = (int)rect[0];
+			top = (int)rect[1];
+		}
+		else
+		{
+			int* rect = (int*)((unsigned char*)cOverlayContext + COverlayContext_DeviceClipBox_offset);
+			left = rect[0];
+			top = rect[1];
+		}
+
+		if (left != monitorLeft || top != monitorTop) {
+			return true;
 		}
 
 		ID3D11Texture2D* backBuffer;
@@ -755,7 +791,7 @@ bool ApplyLUT(void* cOverlayContext, IDXGISwapChain* swapChain, struct tagRECT* 
 		}
 
 		D3D11_TEXTURE2D_DESC oldTextureDesc = textureDesc[index];
-		if (backBufferDesc.Width > oldTextureDesc.Width || backBufferDesc.Height > oldTextureDesc.Height)
+		if (backBufferDesc.Width != oldTextureDesc.Width || backBufferDesc.Height != oldTextureDesc.Height)
 		{
 			if (texture[index] != NULL)
 			{
@@ -763,8 +799,8 @@ bool ApplyLUT(void* cOverlayContext, IDXGISwapChain* swapChain, struct tagRECT* 
 				textureView[index]->Release();
 			}
 
-			UINT newWidth = max(backBufferDesc.Width, oldTextureDesc.Width);
-			UINT newHeight = max(backBufferDesc.Height, oldTextureDesc.Height);
+			UINT newWidth = backBufferDesc.Width;
+			UINT newHeight = backBufferDesc.Height;
 
 			D3D11_TEXTURE2D_DESC newTextureDesc;
 
