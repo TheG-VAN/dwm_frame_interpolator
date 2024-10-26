@@ -705,46 +705,41 @@ bool ApplyLUT(void* cOverlayContext, IDXGISwapChain* swapChain, struct tagRECT* 
 {
 	try
 	{
-		HKEY hKey;
-		LPCSTR subKey = "Software\\DwmFrameInterpolator";
-		LPCSTR fpsValueName = "FpsMultiplier";
-		DWORD fpsValue = 0;
-		DWORD fpsValueSize = sizeof(fpsValue);
-		LPCSTR resValueName = "ResolutionMultiplier";
-		DWORD resValue = 0;
-		DWORD resValueSize = sizeof(resValue);
-		LPCSTR leftValueName = "MonitorLeft";
-		DWORD leftValue = 0;
-		DWORD leftValueSize = sizeof(leftValue);
-		LPCSTR topValueName = "MonitorTop";
-		DWORD topValue = 0;
-		DWORD topValueSize = sizeof(topValue);
-		if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, subKey, 0, KEY_QUERY_VALUE, &hKey) == ERROR_SUCCESS)
-		{
-			// Retrieve the value using RegGetValueA
-			if (RegGetValueA(hKey, nullptr, fpsValueName, RRF_RT_REG_DWORD, NULL, &fpsValue, &fpsValueSize) == ERROR_SUCCESS)
+		// Only change config on re-apply
+		if (!device) {
+			HKEY hKey;
+			LPCSTR subKey = "Software\\DwmFrameInterpolator";
+			LPCSTR fpsValueName = "FpsMultiplier";
+			DWORD fpsValue = 0;
+			DWORD fpsValueSize = sizeof(fpsValue);
+			LPCSTR resValueName = "ResolutionMultiplier";
+			DWORD resValue = 0;
+			DWORD resValueSize = sizeof(resValue);
+			LPCSTR leftValueName = "MonitorLeft";
+			DWORD leftValue = 0;
+			DWORD leftValueSize = sizeof(leftValue);
+			LPCSTR topValueName = "MonitorTop";
+			DWORD topValue = 0;
+			DWORD topValueSize = sizeof(topValue);
+			if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, subKey, 0, KEY_QUERY_VALUE, &hKey) == ERROR_SUCCESS)
 			{
-				fps_multiplier = fpsValue;
-			}
-			if (RegGetValueA(hKey, nullptr, resValueName, RRF_RT_REG_DWORD, NULL, &resValue, &resValueSize) == ERROR_SUCCESS)
-			{
-				// Only update resolution multiplier on new apply
-				if (!device)
+				// Retrieve the value using RegGetValueA
+				if (RegGetValueA(hKey, nullptr, fpsValueName, RRF_RT_REG_DWORD, NULL, &fpsValue, &fpsValueSize) == ERROR_SUCCESS)
+				{
+					fps_multiplier = fpsValue;
+				}
+				if (RegGetValueA(hKey, nullptr, resValueName, RRF_RT_REG_DWORD, NULL, &resValue, &resValueSize) == ERROR_SUCCESS)
 				{
 					resolution_multiplier = resValue;
 				}
-			}
-			// Only change monitor on re-apply
-			if (!device)
-			{
 				if (RegGetValueA(hKey, nullptr, leftValueName, RRF_RT_REG_DWORD, NULL, &leftValue, &leftValueSize) == ERROR_SUCCESS) {
 					monitorLeft = leftValue;
 				}
 				if (RegGetValueA(hKey, nullptr, topValueName, RRF_RT_REG_DWORD, NULL, &topValue, &topValueSize) == ERROR_SUCCESS) {
 					monitorTop = topValue;
 				}
+				RegCloseKey(hKey);
 			}
-			RegCloseKey(hKey);
 		}
 
 		int left, top;
@@ -830,10 +825,6 @@ bool ApplyLUT(void* cOverlayContext, IDXGISwapChain* swapChain, struct tagRECT* 
 		deviceContext->IASetInputLayout(inputLayout);
 
 		deviceContext->VSSetShader(vertexShader, NULL, 0);
-		deviceContext->PSSetShader(mainPass, NULL, 0);
-
-		deviceContext->PSSetShaderResources(0, 1, &textureView[index]);
-		deviceContext->PSSetSamplers(0, 1, &pointSamplerState);
 
 		for (int i = 0; i < numRects; i++)
 		{
