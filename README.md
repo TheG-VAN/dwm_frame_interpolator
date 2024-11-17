@@ -6,7 +6,7 @@ To use, run DwmLutGUI.exe. This should activate the shader - there should be an 
 To view the motion vectors calculated for the shader, hold Ctrl-Shift-Alt.
 
 # FPS
-You want the fps counter at the bottom right to be double (or whatever multiplier you choose) the fps of whatever you want to be interpolated e.g. if you have a game at 60fps, you want the fps of the shader to be 120 if your multiplier is 2. Note that it doesn't have to be exact, as long as it is pretty close, it will work fine. The shader runs at your display refresh rate, so you can change the fps by changing your display refresh rate (I use [display changer](https://12noon.com/?page_id=80) to do this quickly like so: `dc.exe -refresh=%fps%` - you can even put that in a .bat file to be able to change your fps from the start menu).
+The fps counter in the bottom right shows the fps to be interpolated from, this is calculated as your monitor's refresh rate divided by the fps multiplier you have chosen. You want it to be close to the fps of whatever you want to be interpolated e.g. if you have a game at 60fps, you want it to say 60. Note that it doesn't have to be exact, as long as it is pretty close, it will work fine. The shader runs at your display refresh rate, so you can change the fps by changing your display refresh rate (I use [display changer](https://12noon.com/?page_id=80) to do this quickly like so: `dc.exe -refresh=%fps%` - you can even put that in a .bat file to be able to change your fps from the start menu).
 
 ## Explanation of the FPS Multiplier config:
 The number is basically the multiplier of the interpolation. So if it is set to 3, it will turn 60fps into 180fps.
