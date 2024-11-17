@@ -112,6 +112,9 @@ float PrintNum(float2 uv, int value) {
 float4 PS(VS_OUTPUT input) : SV_TARGET {
 	int fps = round(1000000000.0 / frametime);
 	float2 pos = input.tex - float2(0.9775, 0.98);
+    if (fps < 100) {
+        pos.x -= 0.0075;
+    }
 	float2 size = float2(0.0075, 0.02);
     float printed = PrintNum(pos / size, fps);
 	if (printed && printed < 0.5) {
