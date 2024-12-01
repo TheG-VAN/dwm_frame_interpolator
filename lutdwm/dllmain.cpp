@@ -1113,7 +1113,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID lpReserved)
 
 		if (isWindows11_24h2)
 		{
-			MESSAGE_BOX_DBG("DETECTED WINDOWS 11 24H2 OS", MB_OK)
 
 				for (size_t i = 0; i <= moduleInfo.SizeOfImage - sizeof COverlayContext_OverlaysEnabled_bytes_relative_w11_24h2; i++)
 				{
@@ -1122,9 +1121,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID lpReserved)
 						SizeOfImage - i && !aob_match_inverse(address, COverlayContext_Present_bytes_w11_24h2,
 							sizeof COverlayContext_Present_bytes_w11_24h2))
 					{
-						// TODO: Remove this debug instruction
-						MESSAGE_BOX_DBG("DETECTED COverlayContextPresent address", MB_OK)
-
 							COverlayContext_Present_orig_24h2 = (COverlayContext_Present_24h2_t*)address;
 						COverlayContext_Present_real_orig_24h2 = COverlayContext_Present_orig_24h2;
 					}
@@ -1149,7 +1145,6 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD fdwReason, LPVOID lpReserved)
 					if (COverlayContext_Present_orig && COverlayContext_IsCandidateDirectFlipCompatbile_orig &&
 						COverlayContext_OverlaysEnabled_orig)
 					{
-						MESSAGE_BOX_DBG("All addresses successfully retrieved", MB_OK)
 
 							break;
 					}
