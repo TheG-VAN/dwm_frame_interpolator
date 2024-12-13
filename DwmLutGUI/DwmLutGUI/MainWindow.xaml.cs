@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
@@ -8,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Forms;
 using System.Windows.Input;
 using Microsoft.Win32;
@@ -62,15 +64,24 @@ namespace DwmLutGUI
                     object existingFpsValue = key.GetValue(fpsMultKeyName);
                     if (existingFpsValue == null)
                     {
-                        key.SetValue(fpsMultKeyName, 2);
+                        key.SetValue(fpsMultKeyName, 1);
                     }
-                    FpsMultiplierEntry.Value = (int) key.GetValue(fpsMultKeyName);
+                    
+                    if ((int) key.GetValue(fpsMultKeyName) == 1)
+                    {
+                        FpsMultiplierEntry.Value = 2;
+                        AutoFpsMultCheck.IsChecked = true;
+                    }
+                    else
+                    {
+                        FpsMultiplierEntry.Value = (int)key.GetValue(fpsMultKeyName);
+                    }
 
                     // Check if the value exists
                     object existingResValue = key.GetValue(resolutionMultKeyName);
                     if (existingResValue == null)
                     {
-                        key.SetValue(resolutionMultKeyName, 2);
+                        key.SetValue(resolutionMultKeyName, 1);
                     }
                     ResolutionMultiplierEntry.Value = (int)key.GetValue(resolutionMultKeyName);
                 }
@@ -158,6 +169,32 @@ namespace DwmLutGUI
             App.KListener.KeyDown += MonitorLutToggle;
             var keys = Enum.GetValues(typeof(Key)).Cast<Key>().ToList();
             ToggleKeyCombo.ItemsSource = keys;
+        }
+        
+        private void AutoFpsMult_Checked(object sender, RoutedEventArgs e)
+        {
+            using (RegistryKey key = Registry.LocalMachine.CreateSubKey(registryKeyPath))
+            {
+                if (key != null)
+                {
+                    key.SetValue(fpsMultKeyName, 1);
+                }
+            }
+        }
+
+        private void AutoFpsMult_Unchecked(object sender, RoutedEventArgs e)
+        {
+            // Update the file whenever the value changes
+            if (FpsMultiplierEntry.Value.HasValue)
+            {
+                using (RegistryKey key = Registry.LocalMachine.CreateSubKey(registryKeyPath))
+                {
+                    if (key != null)
+                    {
+                        key.SetValue(fpsMultKeyName, FpsMultiplierEntry.Value.Value);
+                    }
+                }
+            }
         }
 
         private void FpsMultiplier_ValueChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
@@ -361,5 +398,30 @@ namespace DwmLutGUI
             monitor.HdrLuts.Remove(monitor.HdrLutPath);
             monitor.HdrLutPath = monitor.HdrLuts.FirstOrDefault() ?? "None";
         }
+    }
+
+    public class NegateVisConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            if (value is bool boolValue)
+            {
+                if (boolValue)
+                {
+                    return Visibility.Collapsed;
+                }
+                else
+                {
+                    return Visibility.Visible;
+                }
+            }
+            return Visibility.Collapsed;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+
     }
 }

@@ -15,6 +15,7 @@
 #include "motion_pass.hlsl.h"
 #include "change_pass.hlsl.h"
 #include "copy_motion_pass.hlsl.h"
+#include "mult_pass.hlsl.h"
 #pragma comment (lib, "d3d11.lib") // Maybe un-useful
 #pragma comment (lib, "d3dcompiler.lib")
 #pragma comment (lib, "dxgi.lib") // Maybe un-useful
@@ -284,6 +285,13 @@ ID3D11PixelShader* copyMotionPass;
 ID3D11ShaderResourceView* motionCopyTextureView;
 ID3D11RenderTargetView* motionCopyRenderTarget;
 
+ID3D11PixelShader* multPass;
+ID3D11ShaderResourceView* multTextureView;
+ID3D11RenderTargetView* multRenderTarget;
+ID3D11ShaderResourceView* multCopyTextureView;
+ID3D11RenderTargetView* multCopyRenderTarget;
+
+
 ID3D11Buffer* constantBuffer;
 
 int fps_multiplier = 2;
@@ -343,7 +351,7 @@ void SetConstantBuffer(int constantData[], int length) {
 void DrawRectangle(struct tagRECT* rect, int index)
 {
 	std::chrono::high_resolution_clock::time_point time_now = std::chrono::high_resolution_clock::now();
-	frametime = 0.9 * frametime + 0.1 * (time_now - time_at).count() * fps_multiplier;
+	frametime = 0.9 * frametime + 0.1 * (time_now - time_at).count();
 	time_at = time_now;
 
 	ID3D11RenderTargetView* renderTargetView;
@@ -365,7 +373,7 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	deviceContext->OMSetRenderTargets(1, &NullRen, NULL);
 
 	// change pass
-	if (fps_multiplier > 2) {
+	if (fps_multiplier != 2) {
 		deviceContext->CSSetShader(changePass, NULL, 0);
 		deviceContext->CSSetUnorderedAccessViews(0, 1, &changeUAV, NULL);
 		deviceContext->CSSetShaderResources(0, 1, &currTextureView);
@@ -383,6 +391,26 @@ void DrawRectangle(struct tagRECT* rect, int index)
 		deviceContext->CSSetUnorderedAccessViews(0, 1, &NullUav, nullptr);
 	}
 
+	//mult pass
+	if (fps_multiplier == 1) {
+		SetVertexBuffer(rect, 1, 1);
+		deviceContext->PSSetShader(multPass, NULL, 0);
+		deviceContext->OMSetRenderTargets(1, &multRenderTarget, NULL);
+		deviceContext->PSSetShaderResources(0, 1, &multCopyTextureView);
+		deviceContext->PSSetShaderResources(1, 1, &changeTextureView);
+		deviceContext->PSSetSamplers(0, 1, &lodSamplerState);
+		deviceContext->Draw(numVerts, 0);
+		ID3D11RenderTargetView* NullRen = nullptr;
+		deviceContext->OMSetRenderTargets(1, &NullRen, NULL);
+
+		// copy mult
+		deviceContext->PSSetShader(copyMotionPass, NULL, 0);
+		deviceContext->OMSetRenderTargets(1, &multCopyRenderTarget, NULL);
+		deviceContext->PSSetShaderResources(0, 1, &multTextureView);
+		deviceContext->PSSetSamplers(0, 1, &lodSamplerState);
+		deviceContext->Draw(numVerts, 0);
+	}
+
 	// motion passes
 	deviceContext->PSSetShader(motionPass, NULL, 0);
 	static int frame_count = 0;
@@ -395,6 +423,7 @@ void DrawRectangle(struct tagRECT* rect, int index)
 		deviceContext->PSSetShaderResources(2, 1, &prevTextureView);
 		deviceContext->PSSetShaderResources(3, 1, &changeTextureView);
 		deviceContext->PSSetShaderResources(4, 1, &motionCopyTextureView);
+		deviceContext->PSSetShaderResources(5, 1, &multTextureView);
 
 		SetVertexBuffer(rect, resolution_multiplier * backBufferDesc.Width >> (3 + mip_level), resolution_multiplier * backBufferDesc.Height >> (3 + mip_level));
 
@@ -405,7 +434,7 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	}
 
 	// copy motion pass
-	if (fps_multiplier > 2) {
+	if (fps_multiplier != 2) {
 		deviceContext->PSSetShader(copyMotionPass, NULL, 0);
 		deviceContext->OMSetRenderTargets(1, &motionCopyRenderTarget, NULL);
 		deviceContext->PSSetShaderResources(0, 1, views[0]);
@@ -426,12 +455,13 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	deviceContext->PSSetSamplers(1, 1, &pointSamplerState);
 	deviceContext->PSSetShaderResources(1, 1, &prevTextureView);
 	deviceContext->PSSetShaderResources(2, 1, views[0]);
+	deviceContext->PSSetShaderResources(3, 1, &multTextureView);
 	deviceContext->PSSetShader(mainPass, NULL, 0);
 
 	// ctrl+shift+alt for debug mode
 	bool debugMode = GetKeyState(VK_CONTROL) & 0x8000 && GetKeyState(VK_SHIFT) & 0x8000 && GetKeyState(VK_MENU) & 0x8000;
-	int constantData[2] = { frametime, debugMode };
-	SetConstantBuffer(constantData, 2);
+	int constantData[3] = { frametime, debugMode, fps_multiplier };
+	SetConstantBuffer(constantData, 3);
 
 	deviceContext->Draw(numVerts, 0);
 
@@ -573,6 +603,18 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 			psBlob->Release();
 		}
 		{
+			ID3DBlob* psBlob;
+			ID3DBlob* compile_error_interface;
+			EXECUTE_D3DCOMPILE_WITH_LOG(
+				D3DCompile(mult_pass, sizeof mult_pass, NULL, NULL, NULL, "PS", "ps_5_0", 0, 0, &psBlob, &
+					compile_error_interface), compile_error_interface)
+
+				LOG_ONLY_ONCE("Pixel shader compiled successfully")
+				device->CreatePixelShader(psBlob->GetBufferPointer(),
+					psBlob->GetBufferSize(), NULL, &multPass);
+			psBlob->Release();
+		}
+		{
 			D3D11_SAMPLER_DESC samplerDesc = {};
 			samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
 			samplerDesc.AddressU = samplerDesc.AddressV = samplerDesc.AddressW = D3D11_TEXTURE_ADDRESS_MIRROR;
@@ -686,6 +728,29 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 			EXECUTE_WITH_LOG(device->CreateTexture2D(&desc, NULL, &tex))
 				EXECUTE_WITH_LOG(device->CreateShaderResourceView((ID3D11Resource*)tex, NULL, &motionCopyTextureView))
 				EXECUTE_WITH_LOG(device->CreateRenderTargetView((ID3D11Resource*)tex, NULL, &motionCopyRenderTarget))
+				tex->Release();
+		}
+		{
+			D3D11_TEXTURE2D_DESC desc = {};
+			desc.Width = 1;
+			desc.Height = 1;
+			desc.MipLevels = 0;
+			desc.ArraySize = 1;
+			desc.Format = DXGI_FORMAT_R32G32_FLOAT;
+			desc.SampleDesc.Count = 1;
+			desc.Usage = D3D11_USAGE_DEFAULT;
+			desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+			desc.CPUAccessFlags = 0;
+			desc.MiscFlags = 0;
+
+			ID3D11Texture2D* tex;
+			EXECUTE_WITH_LOG(device->CreateTexture2D(&desc, NULL, &tex))
+				EXECUTE_WITH_LOG(device->CreateShaderResourceView((ID3D11Resource*)tex, NULL, &multTextureView))
+				EXECUTE_WITH_LOG(device->CreateRenderTargetView((ID3D11Resource*)tex, NULL, &multRenderTarget))
+				tex->Release();
+			EXECUTE_WITH_LOG(device->CreateTexture2D(&desc, NULL, &tex))
+				EXECUTE_WITH_LOG(device->CreateShaderResourceView((ID3D11Resource*)tex, NULL, &multCopyTextureView))
+				EXECUTE_WITH_LOG(device->CreateRenderTargetView((ID3D11Resource*)tex, NULL, &multCopyRenderTarget))
 				tex->Release();
 		}
 	}

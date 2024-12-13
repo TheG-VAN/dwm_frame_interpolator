@@ -12,11 +12,12 @@ SamplerState smp : register(s0);
 SamplerState pointSmp : register(s1);
 
 Texture2D prevTex : register(t1);
-
 Texture2D motionTex : register(t2);
+Texture2D multTex : register(t3);
 
 int frametime : register(b0);
 bool debug : register(b0);
+int fps_mult : register(b0);
 
 float make_line(float2 p, float2 a, float2 b)
 {
@@ -110,7 +111,13 @@ float PrintNum(float2 uv, int value) {
 }
 
 float4 PS(VS_OUTPUT input) : SV_TARGET {
-	int fps = round(1000000000.0 / frametime);
+    float f_mult;
+    if (fps_mult == 1) {
+        f_mult = multTex.Sample(smp, float2(0,0)).x;
+    } else {
+        f_mult = 1.0 / fps_mult;
+    }
+	int fps = round(1000000000.0 / frametime * f_mult);
 	float2 pos = input.tex - float2(0.9775, 0.98);
     if (fps < 100) {
         pos.x -= 0.0075;
@@ -120,10 +127,11 @@ float4 PS(VS_OUTPUT input) : SV_TARGET {
 	if (printed && printed < 0.5) {
 		return lerp(backBufferTex.Sample(smp, input.tex), pow(1.05 - printed, 20) * float4(0, 1, 1, 1), pow(1 - printed, 10));
 	}
-	float2 m = motionTex.Sample(smp, input.tex).xy;
-    float mse = motionTex.Sample(smp, input.tex).z;
+    float4 motion_smp = motionTex.Sample(smp, input.tex);
+	float2 m = motion_smp.xy;
+    float mse = motion_smp.z;
     float2 texelsize = input.tex / input.pos.xy;
-    float mmult = motionTex.Sample(smp, input.tex).w;
+    float mmult = motion_smp.w;
     float2 motion_in_middle = motionTex.Sample(smp, input.tex + m * mmult).xy;
     float motion_diff = saturate(0.05 * (-1 + (abs(m.x) + abs(m.y)) / (abs(motion_in_middle.x) + abs(motion_in_middle.y))));
     if (debug) {

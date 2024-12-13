@@ -4,6 +4,6 @@
              xmlns:local="clr-namespace:DwmLutGUI"
              StartupUri="MainWindow.xaml" Exit="App_OnExit">
     <Application.Resources>
-         
-    </Application.Resources>
+		<local:NegateVisConverter x:Key="NegateVisConverter"/>
+	</Application.Resources>
 </Application>

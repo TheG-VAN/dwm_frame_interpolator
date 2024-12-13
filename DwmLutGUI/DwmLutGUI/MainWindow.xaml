@@ -6,7 +6,7 @@
 		xmlns:xctk="http://schemas.xceed.com/wpf/xaml/toolkit"
         xmlns:local="clr-namespace:DwmLutGUI"
         mc:Ignorable="d"
-        Title="DWM Frame Interpolator" Height="300" Width="400" MinHeight="300" MinWidth="400" Closing="OnProcessExit">
+        Title="DWM Frame Interpolator" Height="350" Width="400" MinHeight="350" MinWidth="400" Closing="OnProcessExit">
     <Window.DataContext>
         <local:MainViewModel />
     </Window.DataContext>
@@ -20,28 +20,34 @@
 					<RowDefinition Height="Auto" />
 					<RowDefinition Height="Auto" />
 					<RowDefinition Height="Auto" />
+					<RowDefinition Height="Auto" />
 					<RowDefinition Height="*" />
 					<RowDefinition Height="Auto" />
 				</Grid.RowDefinitions>
 
 				<StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Grid.Row="0">
+					<Label Content="Auto Calculate FPS Multiplier:" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="5" />
+					<CheckBox x:Name="AutoFpsMultCheck" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="5" Checked="AutoFpsMult_Checked" Unchecked="AutoFpsMult_Unchecked"/>
+				</StackPanel>
+
+				<StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Grid.Row="1" Visibility="{Binding ElementName=AutoFpsMultCheck, Path=IsChecked, Converter={StaticResource NegateVisConverter}}">
 				    <Label Content="FPS Multiplier (e.g. 2 to turn 60fps into 120fps):" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="5" />
 				    <xctk:IntegerUpDown x:Name="FpsMultiplierEntry" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="5" Minimum="2" Maximum="20" ValueChanged="FpsMultiplier_ValueChanged"/>
 				</StackPanel>
 
-				<StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Grid.Row="1">
+				<StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Grid.Row="2">
 					<Label Content="Resolution Multiplier (performance impact, 1 is default):" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="5" />
 					<xctk:IntegerUpDown x:Name="ResolutionMultiplierEntry" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="5" Minimum="1" Maximum="8" ValueChanged="ResolutionMultiplier_ValueChanged"/>
 				</StackPanel>
 
-				<StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Grid.Row="2">
+				<StackPanel Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center" Grid.Row="3">
 					<Label Content="Hotkey:" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="5" />
 					<ComboBox x:Name="ToggleKeyCombo" Text="Toggle Key" Height="25" SelectedItem="{Binding ToggleKey}" />
 				</StackPanel>
 
 				<DataGrid SelectedItem="{Binding SelectedMonitor}" ItemsSource="{Binding Monitors}" RowHeaderWidth="0"
                       IsReadOnly="{Binding IsActive}" AutoGenerateColumns="False" DockPanel.Dock="Bottom" Margin="0,0,0,6"
-                      CanUserReorderColumns="False" CanUserSortColumns="False" CanUserResizeColumns="False" Grid.Row="3">
+                      CanUserReorderColumns="False" CanUserSortColumns="False" CanUserResizeColumns="False" Grid.Row="4">
 					<DataGrid.Columns>
 						<DataGridTextColumn Header="#" Binding="{Binding SourceId}" IsReadOnly="True" />
 						<DataGridTextColumn Header="Name" Binding="{Binding Name}" IsReadOnly="True" />
@@ -57,7 +63,7 @@
 				</DataGrid>
 
 
-				<Grid Grid.Row="4">
+				<Grid Grid.Row="5">
 				    <Grid.ColumnDefinitions>
 					    <ColumnDefinition Width="*" />
 					    <ColumnDefinition Width="*" />
