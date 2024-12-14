@@ -99,6 +99,9 @@ float PrintDigit(float2 uv, int value) {
 float PrintNum(float2 uv, int value) {
     int powers[] = {1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000, 10000000000};
 	int maxDigits = ceil(log10(value + 1));
+    if (value == 0) {
+        maxDigits = 1;
+    }
     int iu = int(floor(uv.x));
     if( iu>=0 && iu<maxDigits )
     {
@@ -127,6 +130,9 @@ float4 PS(VS_OUTPUT input) : SV_TARGET {
 	if (printed && printed < 0.5) {
 		return lerp(backBufferTex.Sample(smp, input.tex), pow(1.05 - printed, 20) * float4(0, 1, 1, 1), pow(1 - printed, 10));
 	}
+    if (fps < 10) {  // Disable interpolation when fps < 10 (e.g. in menus and static screens)
+        return backBufferTex.Sample(smp, input.tex);
+    }
     float4 motion_smp = motionTex.Sample(smp, input.tex);
 	float2 m = motion_smp.xy;
     float mse = motion_smp.z;
