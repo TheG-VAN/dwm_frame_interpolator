@@ -274,7 +274,7 @@ ID3D11ShaderResourceView* motion8TextureView;
 ID3D11RenderTargetView* motion8RenderTarget;
 ID3D11ShaderResourceView* motion9TextureView;
 ID3D11RenderTargetView* motion9RenderTarget;
-ID3D11ShaderResourceView** views[] = { &motion0TextureView, &motion1TextureView, &motion2TextureView, &motion3TextureView, &motion4TextureView, &motion5TextureView, &motion6TextureView, &motion7TextureView, &motion8TextureView, &motion9TextureView };
+ID3D11ShaderResourceView** views[] = { &motion0TextureView, &motion1TextureView, &motion2TextureView, &motion3TextureView, &motion4TextureView, &motion5TextureView, &motion6TextureView, &motion7TextureView, &motion8TextureView, &motion9TextureView, &motion0TextureView };
 ID3D11RenderTargetView** targets[] = { &motion0RenderTarget, &motion1RenderTarget, &motion2RenderTarget, &motion3RenderTarget, &motion4RenderTarget, &motion5RenderTarget, &motion6RenderTarget, &motion7RenderTarget, &motion8RenderTarget, &motion9RenderTarget };
 
 ID3D11ComputeShader* changePass;
@@ -304,6 +304,8 @@ int ctr = 0;
 std::chrono::high_resolution_clock::time_point time_at = std::chrono::high_resolution_clock::now();
 int fps = 0;
 long long frametime = 0;
+
+int max_mip_level = 6;
 
 void SetVertexBuffer(struct tagRECT* rect, float texWidth, float texHeight) {
 	float width = backBufferDesc.Width;
@@ -415,7 +417,7 @@ void DrawRectangle(struct tagRECT* rect, int index)
 	deviceContext->PSSetShader(motionPass, NULL, 0);
 	static int frame_count = 0;
 	frame_count++;
-	for (int mip_level = 6; mip_level >= 0; mip_level--) {
+	for (int mip_level = max_mip_level; mip_level >= 0; mip_level--) {
 		deviceContext->OMSetRenderTargets(1, targets[mip_level], NULL);
 		deviceContext->PSSetShaderResources(0, 1, views[mip_level + 1]);
 		deviceContext->PSSetSamplers(0, 1, &lodSamplerState);
@@ -663,7 +665,7 @@ void InitializeStuff(IDXGISwapChain* swapChain)
 				tex->Release();
 		}
 		{
-			for (int i = 0; i <= 6; i++) {
+			for (int i = 0; i <= max_mip_level; i++) {
 				D3D11_TEXTURE2D_DESC desc = {};
 				desc.Width = resolution_multiplier * backBufferDesc.Width >> (3 + i);
 				desc.Height = resolution_multiplier * backBufferDesc.Height >> (3 + i);
@@ -872,6 +874,7 @@ bool ApplyLUT(void* cOverlayContext, IDXGISwapChain* swapChain, struct tagRECT* 
 
 		if (!device)
 		{
+			max_mip_level = min(9, floor(log2(backBufferDesc.Height * resolution_multiplier)) - 3);
 			LOG_ONLY_ONCE("Initializing stuff in ApplyLUT")
 				InitializeStuff(swapChain);
 		}
