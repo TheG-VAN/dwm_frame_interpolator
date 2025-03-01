@@ -1,6 +1,6 @@
 A program which uses the same method for hooking into the desktop window manager as [dwm_lut](https://github.com/ledoge/dwm_lut), but uses it for motion interpolation instead.
 
-Let's say you have agame that's capped at 60fps but your monitor is 120hz. Use the DWM Frame Interpolator, and your game will now (kinda) look like 120fps (note: only works on windowed or borderless windowed, not exclusive fullscreen).
+Let's say you have a game that's capped at 60fps but your monitor is 120hz. Use the DWM Frame Interpolator, and your game will now (kinda) look like 120fps (note: only works on windowed or borderless windowed, not exclusive fullscreen).
 
 # Usage
 To use, run DwmLutGUI.exe. This should activate the shader - there should be an fps counter visible in the bottom right of the screen. Additionally, an extra window called DummyApp should have opened. This is there to force DWM into updating every frame rather than only when a change to the screen occurs (allowing us to insert in-between frames).
