@@ -1,3 +1,5 @@
+### Not supported on Windows 24H2, see https://github.com/lauralex/dwm_lut/issues/60 for more details and potential workarounds.
+
 A program which uses the same method for hooking into the desktop window manager as [dwm_lut](https://github.com/ledoge/dwm_lut), but uses it for motion interpolation instead.
 
 Let's say you have a game that's capped at 60fps but your monitor is 120hz. Use the DWM Frame Interpolator, and your game will now (kinda) look like 120fps (note: only works on windowed or borderless windowed, not exclusive fullscreen).
